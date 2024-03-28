@@ -1,17 +1,20 @@
 import asyncio
 import logging
-from aiogram import *
-from aiogram.types import ReplyKeyboardRemove, ReplyKeyboardMarkup, KeyboardButton
-from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.dispatcher import FSMContext
-from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram import Bot, Dispatcher, types
+from aiogram.filters.command import Command
+from config import config
 
 # Включаем логирование, чтобы не пропустить важные сообщения
 logging.basicConfig(level=logging.INFO)
 # Объект бота
+bot = Bot(token=config.bot_token.get_secret_value())
 bot = Bot(token="1149862512:AAFHaUq_sy_ucvENdke7lOOh9CxVWVnm9Qs")
 # Диспетчер
-dp = Dispatcher(bot, storage=MemoryStorage())
+dp = Dispatcher(bot)
+
+
+
+
 
 class GetTokenState(StatesGroup):
     token_state = State()  # Will be represented in storage as 'Mydialog:otvet'
@@ -73,5 +76,4 @@ async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    #dp.message.register(token, commands=["token"])
     asyncio.run(main())

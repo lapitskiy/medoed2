@@ -17,6 +17,7 @@ class StartTrade(threading.Thread):
     def start_trade(self):
         #print('==========GO Trade Thread==========')
         while True:
+            pause
             start_trade_stg(stg='10point')
 
 
