@@ -23,9 +23,9 @@ dp = Dispatcher()
 
 @dp.message(F.text, Command("start"))
 async def any_message(message: Message):
-    dbAccCheck(message.from_user.id)
+    result = dbAccCheck(message.from_user.id)
     await message.answer(
-        f"Hello, <b>{message.from_user.username}</b>!"
+        f"Привет, <b>{message.from_user.username}</b>! {result['answer']}"
     )
 
 # Запуск процесса поллинга новых апдейтов

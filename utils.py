@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, select
+from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, select, insert
 from sqlalchemy import text
 from config import config
 
@@ -27,9 +27,11 @@ def dbAccCheck(id):
     connection = engine.connect()
 
     metadata = MetaData()
-    metadata.reflect(bind=engine)
 
-    table = metadata.tables['user']
+    table = Table('user', metadata,
+                       Column('user', Integer)
+                       )
+
     print(f" table {table}")
     # Выполняем SQL-запрос
     #result = connection.execute(f"SELECT user FROM user WHERE user = :user", params)
@@ -38,21 +40,25 @@ def dbAccCheck(id):
     query = select(table).where(table.c.user == id)
     #query = select(table).where(table.c.user == id)
     result = connection.execute(query)
-    if result:
-        print(f" есть запись {result}")
-
+    result = result.first()
     if not result:
         print(f" добавляем акк")
         # Вставляем новую запись в таблицу
         # Создаем объект MetaData
-        insert_query = table.insert().values(user=id)
-        connection.execute(insert_query)
-        ddict = {'answer': 'Ваш аккаунт добавлен в бота'}
-
+        insert_query = insert(table).values(user=id)
+        print(insert_query)
+        compiled = insert_query.compile()
+        print(compiled.params)
+        add = connection.execute(insert_query)
+        connection.commit()
+        print(f" add {add}")
+        ddict = {'answer': 'Ваш аккаунт создан'}
+    else:
     # Печатаем результат запроса
-    for row in result:
-        print(f" result2 {result}")
-        print(row)
+        for row in result:
+            if row == id:
+                ddict = {'answer': 'Ваш аккаунт уже активирован'}
+            print(row)
 
     # Закрываем соединение
     connection.close()
