@@ -1,6 +1,8 @@
 from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, select, insert
 from sqlalchemy import text
 from config import config
+from pybit.unified_trading import HTTP
+from pybit.exceptions import InvalidRequestError
 
 
 def insert_data(db, table, rows):
@@ -62,4 +64,25 @@ def dbAccCheck(id):
 
     # Закрываем соединение
     connection.close()
+    return ddict
+
+def dbAddApi(api):
+    pass
+
+
+def TestApiByBit(api_key, api_secret):
+    ddict = {}
+    session = HTTP(
+        testnet=False,
+        api_key='G3sGs9GrEZQtoTsQTQ',
+        api_secret='K8KZwvF3YToRtX0tUeBaYLmspudqm36TQ51S',
+    )
+    try:
+
+        ddict['result'] = session.get_wallet_balance(
+            accountType="UNIFIED",
+            coin="BTC",
+        )
+    except InvalidRequestError as e:
+        return {'error': e}
     return ddict
