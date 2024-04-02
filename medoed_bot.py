@@ -45,13 +45,6 @@ async def settings_message(message: Message):
         f"Введите ключ api ByBit в формате /api_bybit api_key api_secret", reply_markup=keybord_settings_replay()
     )
 
-@dp.message(F.text.lower() == "проверить базу")
-async def settings_message(message: Message):
-    await bot.delete_message(message.from_user.id, message.message_id)
-    result = dbCheck()
-    await message.answer(
-        f"{result}")
-
 
 @dp.message(Command("api_bybit"))
 async def cmd_settimer(

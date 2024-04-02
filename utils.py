@@ -55,6 +55,7 @@ def dbCheck():
     print(f"exc {type(connection)}")
     if type(connection) == tuple:
         return connection
+
     connection.close()
     return 'Соедение с базой успешное, целостность базы не нарушена'
 
