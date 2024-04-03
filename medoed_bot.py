@@ -30,6 +30,51 @@ async def any_message(message: Message):
         f"Привет, <b>{message.from_user.username}</b>! {result['answer']}", reply_markup=keybord_main_replay()
     )
 
+''' КРИПТА '''
+''' КРИПТА '''
+''' КРИПТА '''
+@dp.message(F.text.lower() == "крипта")
+async def crypto_menu_message(message: Message):
+    await bot.delete_message(message.from_user.id, message.message_id)
+    await message.answer(
+        f"Торговля криптой", reply_markup=keybord_crypto_replay()
+    )
+
+@dp.message(F.text.lower() == "добавить крипту")
+async def crypto_add_message(message: Message):
+    await bot.delete_message(message.from_user.id, message.message_id)
+    await message.answer(
+        f"Введите название торгуемой пары в формате /addcoin bybit BTCUSDT ", reply_markup=keybord_crypto_replay()
+    )
+
+@dp.message(Command("addcoin"))
+async def add_coin_command(
+        message: Message,
+        command: CommandObject
+):
+    # Если не переданы никакие аргументы, то
+    # command.args будет None
+    if command.args is None:
+        await message.answer(
+            "Ошибка: неправильный формат команды. Пример:\n"
+            "/addcoin bybit TONUSDT"
+        )
+        return
+    try:
+
+        exchange, coin = command.args.split(" ", maxsplit=1)
+        # Если получилось меньше двух частей, вылетит ValueError
+    except ValueError:
+        await message.answer(
+            "Ошибка: неправильный формат команды. Пример:\n"
+            "/addcoin bybit TONUSDT"
+        )
+        return
+    result = dbAddCoin(exchange, coin, message.from_user.id)
+    await message.answer(f"{result['answer']}")
+
+''' Настройки '''
+''' Настройки '''
 ''' Настройки '''
 @dp.message(F.text.lower() == "настройки")
 async def settings_message(message: Message):
@@ -39,7 +84,7 @@ async def settings_message(message: Message):
     )
 
 @dp.message(F.text.lower() == "ввести api bybit")
-async def settings_message(message: Message):
+async def add_bybit_message(message: Message):
     await bot.delete_message(message.from_user.id, message.message_id)
     await message.answer(
         f"Введите ключ api ByBit в формате /api_bybit api_key api_secret", reply_markup=keybord_settings_replay()
@@ -47,7 +92,7 @@ async def settings_message(message: Message):
 
 
 @dp.message(Command("api_bybit"))
-async def cmd_settimer(
+async def add_bybit_api_command(
         message: Message,
         command: CommandObject
 ):
@@ -55,31 +100,28 @@ async def cmd_settimer(
     # command.args будет None
     if command.args is None:
         await message.answer(
-            "Ошибка: вы не указали api"
+            "Ошибка: неправильный формат команды. Пример:\n"
+            "/api_bybit X3sGs9GrEZQtoTsQTQ Z8KZwvF3YToRtX0tUeBaYLmspudqm36TQ51X"
         )
         return
     try:
+
         api_key, api_secret = command.args.split(" ", maxsplit=1)
         # Если получилось меньше двух частей, вылетит ValueError
     except ValueError:
         await message.answer(
             "Ошибка: неправильный формат команды. Пример:\n"
-            "/api_bybit X3sGs9GrEZQtoTsQTQ Z8KZwvF3YToRtX0tUeBaYLmspudqm36TQ51S"
+            "/api_bybit X3sGs9GrEZQtoTsQTQ Z8KZwvF3YToRtX0tUeBaYLmspudqm36TQ51X"
         )
         return
     # Пробуем разделить аргументы на две части по первому встречному пробелу
 
-    result = TestApiByBit(api_key, api_secret)
-    if 'error' in result:
-        await message.answer(
-            f"Ошибка: {result['error']}")
+    result = TestApiByBit(api_key, api_secret, message.from_user.id)
+    await message.answer(f"{result['answer']}")
 
-    if 'result' in result:
-        await message.answer(
-            f"Api подлючен. Ваш счет: {result['result']}")
 
 @dp.message(F.text.lower() == "назад в меню")
-async def settings_message(message: Message):
+async def back_main_menu_message(message: Message):
     await bot.delete_message(message.from_user.id, message.message_id)
     await message.answer(
         f"Основное меню", reply_markup=keybord_main_replay()

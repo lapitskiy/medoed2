@@ -14,7 +14,7 @@ api = Table('api', metadata,
 user = Table('user', metadata,
                        Column('id', Integer, Identity(always=True), primary_key=True),
                        Column('user', Integer, unique=True),
-                       Column('api', ForeignKey('api.id')),
+                       Column('api', ForeignKey('api.id', ondelete='SET NULL')),
                        )
 
 
