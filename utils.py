@@ -75,6 +75,7 @@ def dbAddCoin(exchange, coin, user_id):
                     ddict['answer'] = f'Пары нет в споте ByBit, укажите правильно название пары (пример: BTCUSDT)\nМонета не добавлена в базу'
                 else:
                     if get_coin['result']['list'][0]['symbol'] == coin:
+
                         ddict['answer'] = f'Пара есть в споте ByBit\nМонета добавлена в базу бота'
             except InvalidRequestError as e:
                 return {'answer': e}
