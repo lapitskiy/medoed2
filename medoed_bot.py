@@ -1,16 +1,15 @@
 import asyncio
 import logging
-from aiogram import Bot, Dispatcher, types
-from config import config
-from trade import trade
+from aiogram import Bot, Dispatcher
 
 from aiogram import F
-from aiogram.types import Message
-from aiogram.filters import Command, CommandObject
-from aiogram.enums import ParseMode
+from aiogram.types import Message, CallbackQuery
+from aiogram.filters import Command, CommandObject, CommandStart
 
 from utils import *
 from keyboards import *
+
+from keyboards import MyCallback
 
 # Включаем логирование, чтобы не пропустить важные сообщения
 logging.basicConfig(level=logging.INFO)
@@ -19,39 +18,56 @@ bot = Bot(token=config.bot_token.get_secret_value(), parse_mode="HTML")
 # Диспетчер
 dp = Dispatcher()
 
+''' INLINE MAIN'''
+''' INLINE MAIN'''
+''' INLINE MAIN'''
 
+@dp.message(Command("start"))
+async def add_bybit_api_command(message: Message, command: CommandObject):
+        result = dbAccCheck(message.from_user.id)
+        await message.delete()
+        await message.answer(f"Привет, <b>{message.from_user.username}</b>!",
+                             reply_markup=main_keybord())
+        return
 
+# Filter callback by type and value of field :code:`foo`
+@dp.callback_query(MyCallback.filter(F.foo == "main_menu"))
+async def callback_main_menu(query: CallbackQuery, callback_data: MyCallback):
+    #await query.message.delete()
+    await query.message.edit_text(f"Главное меню", reply_markup=main_keybord())
 
-@dp.message(F.text, Command("start"))
-async def any_message(message: Message):
-    result = dbAccCheck(message.from_user.id)
-    #await bot.delete_message(message.from_user.id, message.message_id)
-    await message.answer(
-        f"Привет, <b>{message.from_user.username}</b>! {result['answer']}", reply_markup=keybord_main_replay()
-    )
+# Filter callback by type and value of field :code:`foo`
+@dp.callback_query(MyCallback.filter(F.foo == "report"))
+async def callback_report(query: CallbackQuery, callback_data: MyCallback):
+    await query.message.edit_text(f"Сводка будет тут", reply_markup=main_keybord())
 
-''' КРИПТА '''
-''' КРИПТА '''
-''' КРИПТА '''
-@dp.message(F.text.lower() == "крипта")
-async def crypto_menu_message(message: Message):
-    await bot.delete_message(message.from_user.id, message.message_id)
-    await message.answer(
-        f"Торговля криптой", reply_markup=keybord_crypto_replay()
-    )
+# Filter callback by type and value of field :code:`foo`
+@dp.callback_query(MyCallback.filter(F.foo == "settings"))
+async def callback_settings(query: CallbackQuery, callback_data: MyCallback):
+    #await query.message.delete()
+    await query.message.edit_text(f"Настройки", reply_markup=settings_keybord())
 
-@dp.message(F.text.lower() == "добавить крипту")
-async def crypto_add_message(message: Message):
-    await bot.delete_message(message.from_user.id, message.message_id)
-    await message.answer(
-        f"Введите название торгуемой пары в формате /addcoin bybit BTCUSDT ", reply_markup=keybord_crypto_replay()
-    )
+''' INLINE TRADE'''
+''' INLINE TRADE'''
+''' INLINE TRADE'''
+
+# Filter callback by type and value of field :code:`foo`
+@dp.callback_query(MyCallback.filter(F.foo == "trade"))
+async def callback_trade_settings(query: CallbackQuery, callback_data: MyCallback):
+    result = CheckExistCoin(query.from_user.id)
+    await query.message.edit_text(f"{result['answer']}\n", reply_markup=trade_keybord())
+
+# Filter callback by type and value of field :code:`foo`
+@dp.callback_query(MyCallback.filter(F.foo == "addcoin"))
+async def callback_addcoin(query: CallbackQuery, callback_data: MyCallback):
+    await query.message.edit_text(f"Введите название торгуемой пары в формате\n<b>/addcoin bybit TONUSDT</b>", reply_markup=trade_keybord())
+
+''' TRADE COMMAND'''
 
 @dp.message(Command("addcoin"))
 async def add_coin_command(
         message: Message,
-        command: CommandObject
-):
+        command: CommandObject):
     # Если не переданы никакие аргументы, то
     # command.args будет None
     if command.args is None:
@@ -70,26 +86,24 @@ async def add_coin_command(
             "/addcoin bybit TONUSDT"
         )
         return
-    result = dbAddCoin(exchange, coin, message.from_user.id)
+    result = AddCoin(exchange, coin, message.from_user.id)
     await message.answer(f"{result['answer']}")
 
-''' Настройки '''
-''' Настройки '''
-''' Настройки '''
-@dp.message(F.text.lower() == "настройки")
-async def settings_message(message: Message):
-    await bot.delete_message(message.from_user.id, message.message_id)
-    await message.answer(
-        f"Меню настроек", reply_markup=keybord_settings_replay()
-    )
 
-@dp.message(F.text.lower() == "ввести api bybit")
-async def add_bybit_message(message: Message):
-    await bot.delete_message(message.from_user.id, message.message_id)
-    await message.answer(
-        f"Введите ключ api ByBit в формате /api_bybit api_key api_secret", reply_markup=keybord_settings_replay()
-    )
+''' INLINE SETTINGS'''
+''' INLINE SETTINGS'''
+''' INLINE SETTINGS'''
 
+# Filter callback by type and value of field :code:`foo`
+@dp.callback_query(MyCallback.filter(F.foo == "api_bybit"))
+async def callback_api_bybit(query: CallbackQuery, callback_data: MyCallback):
+    #await query.message.delete()
+    result = CheckApiEx(query.from_user.id)
+    await query.message.edit_text(f"{result['answer']}\nВведите ключ api ByBit в формате \n/api_bybit api_key api_secret", reply_markup=settings_keybord())
+
+''' COMMAND '''
+''' COMMAND '''
+''' COMMAND '''
 
 @dp.message(Command("api_bybit"))
 async def add_bybit_api_command(
@@ -116,16 +130,11 @@ async def add_bybit_api_command(
         return
     # Пробуем разделить аргументы на две части по первому встречному пробелу
 
-    result = TestApiByBit(api_key, api_secret, message.from_user.id)
+    result = AddApiByBit(api_key, api_secret, message.from_user.id)
+    await message.delete()
     await message.answer(f"{result['answer']}")
 
 
-@dp.message(F.text.lower() == "назад в меню")
-async def back_main_menu_message(message: Message):
-    await bot.delete_message(message.from_user.id, message.message_id)
-    await message.answer(
-        f"Основное меню", reply_markup=keybord_main_replay()
-    )
 
 # Запуск процесса поллинга новых апдейтов
 async def main():
