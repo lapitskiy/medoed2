@@ -1,5 +1,4 @@
-from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, select, insert
-from sqlalchemy import text
+import emoji #https://carpedm20.github.io/emoji/
 
 from pybit.unified_trading import HTTP
 from pybit.exceptions import InvalidRequestError
@@ -46,35 +45,6 @@ def dbCheck():
     connection.close()
     return 'Соедение с базой успешное, целостность базы не нарушена'
 
-def AddCoin2(exchange, coin, user_id):
-    ddict = {}
-    connection = dbConnect()
-    current_user = connection.execute(select(user).where(user.c.user == user_id)).first()
-    current_user_api = connection.execute(select(api).where(api.c.id == current_user.api)).first()
-    if not current_user:
-        ddict = {'answer': 'пользовате не создан, запустите команду start'}
-    else:
-        if current_user.api is None:
-            ddict = {'answer': 'нет api записи, укажите его в настройках'}
-        else:
-            session = HTTP(
-                testnet=False,
-                api_key=current_user_api.bybit_key,
-                api_secret=current_user_api.bybit_secret,
-            )
-            try:
-                get_coin = session.get_instruments_info(category='spot', symbol=coin,)
-                print(f"instr {get_coin}")
-                if not get_coin['result']['list']:
-                    ddict['answer'] = f'Пары нет в споте ByBit, укажите правильно название пары (пример: BTCUSDT)\nМонета не добавлена в базу'
-                else:
-                    if get_coin['result']['list'][0]['symbol'] == coin:
-
-                        ddict['answer'] = f'Пара есть в споте ByBit\nМонета добавлена в базу бота'
-            except InvalidRequestError as e:
-                return {'answer': e}
-    return ddict
-
 def AddCoin(exchange, coin, id):
     ddict = {'answer': ''}
     with Session(getEngine()) as session:
@@ -96,8 +66,10 @@ def AddCoin(exchange, coin, id):
                         ddict['answer'] = ddict['answer'] + f'<b>Монета не добавлена в базу</b>\nПары нет в споте ByBit, укажите правильно название (пример: BTCUSDT)\n'
                     else:
                         if get_coin['result']['list'][0]['symbol'] == coin:
-                            query.stg = [Strategy(symbol=coin, limit=0, start=False)]
-                            session.add(query)
+                            print(f"coin {coin} {query.id}")
+                            stg = Strategy(symbol=coin, limit=0, start=False, user_id=query.id)
+                            print(f"query.stg {query.stg}")
+                            session.add(stg)
                             session.commit()
                             ddict['answer'] = f'Пара есть в споте ByBit\n<b>{coin} добавлен в базу бота</b>\n\nДля запуска торговли отредактируйте стратегию этой пары'
                 except InvalidRequestError as e:
@@ -148,12 +120,33 @@ def CheckApiEx(user_id, company=None):
     return ddict
 
 def CheckExistCoin(user_id):
-    ddict = {'answer' : '<b>Торгуемые пары:</b>\n'}
+    ddict = {'answer' : '<b>Подключенные пары:</b>\n'}
     with Session(getEngine()) as session:
         query = session.query(User).options(selectinload(User.stg)).filter_by(user=user_id).one()
     if not query.stg:
         ddict['answer'] = ddict['answer'] + f'У вас не добавлены пары для торговли\n'
     else:
         for key in query.stg:
-            ddict['answer'] = ddict['answer'] + f'{key.symbol}\n'
+            emj = emoji.emojize(":check_mark_button:") if key.start else emoji.emojize(":stop_sign:")
+            ddict['answer'] = ddict['answer'] + f'{key.symbol} {emj}\n'
     return ddict
+
+def getStgData(stg_id):
+    with Session(getEngine()) as session:
+        query = session.query(Strategy).filter_by(id=stg_id).one()
+    ddict = {'answer': f'<b>{query.symbol}</b>:\n'}
+    if not query:
+        ddict['answer'] = ddict['answer'] + f'Нет\n'
+    else:
+        start_txt = f'Стратегия запушена '+ emoji.emojize(":check_mark_button:")+'\n' if query.start else f'Стратегия остановлена' + emoji.emojize(":stop_sign:")+'\n'
+        stg_txt = ''
+        ddict['answer'] = ddict['answer'] + start_txt + stg_txt
+    return ddict
+
+def changeStgStart(stg_id):
+    with Session(getEngine()) as session:
+        query = session.query(Strategy).filter_by(id=stg_id).one()
+        query.start = False if query.start else True
+        session.commit()
+
+

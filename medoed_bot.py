@@ -11,6 +11,9 @@ from keyboards import *
 
 from keyboards import MyCallback
 
+from strategy import *
+
+
 # Включаем логирование, чтобы не пропустить важные сообщения
 logging.basicConfig(level=logging.INFO)
 # Объект бота
@@ -55,19 +58,40 @@ async def callback_settings(query: CallbackQuery, callback_data: MyCallback):
 @dp.callback_query(MyCallback.filter(F.foo == "trade"))
 async def callback_trade_settings(query: CallbackQuery, callback_data: MyCallback):
     result = CheckExistCoin(query.from_user.id)
-    await query.message.edit_text(f"{result['answer']}\n", reply_markup=trade_keybord())
+    await query.message.edit_text(f"{result['answer']}\n", reply_markup=trade_keybord(user_id=query.from_user.id))
 
 # Filter callback by type and value of field :code:`foo`
 @dp.callback_query(MyCallback.filter(F.foo == "addcoin"))
 async def callback_addcoin(query: CallbackQuery, callback_data: MyCallback):
-    await query.message.edit_text(f"Введите название торгуемой пары в формате\n<b>/addcoin bybit TONUSDT</b>", reply_markup=trade_keybord())
+    await query.message.edit_text(f"Введите название торгуемой пары в формате\n<b>/addcoin bybit TONUSDT</b>", reply_markup=trade_keybord(user_id=query.from_user.id))
+
+''' TRADE ORM KEYBORD'''
+
+# Filter callback by type and value of field :code:`foo`
+@dp.callback_query(TradeCallback.filter(F.foo == 'stg'))
+async def callback_trade(query: CallbackQuery, callback_data: TradeCallback):
+    ddict = getStgData(stg_id=callback_data.id)
+    await query.message.edit_text(f"{ddict['answer']}", reply_markup=stg_keybord(stg_id=callback_data.id))
+
+@dp.callback_query(EditStgCallback.filter(F.foo == 'stg_edit'))
+async def callback_edit_stg(query: CallbackQuery, callback_data: EditStgCallback):
+    if callback_data.action == 'start':
+        changeStgStart(stg_id=callback_data.id)
+    ddict = getStgData(stg_id=callback_data.id)
+    await query.message.edit_text(f"{ddict['answer']}", reply_markup=stg_keybord(stg_id=callback_data.id))
+
+@dp.callback_query(ChooseStgCallback.filter(F.foo == 'stg_choose'))
+async def callback_choose_stg(query: CallbackQuery, callback_data: ChooseStgCallback):
+    result = {'answer': 'Выберите стратегию для получения помощи по настройке'}
+    if callback_data.action in stg_dict:
+        result['answer'] = runStg(stg_name=callback_data.action)
+    await query.message.edit_text(f"{result['answer']}", reply_markup=stg_choose_keybord(stg_id=callback_data.id))
+
 
 ''' TRADE COMMAND'''
 
 @dp.message(Command("addcoin"))
-async def add_coin_command(
-        message: Message,
-        command: CommandObject):
+async def add_coin_command(message: Message, command: CommandObject):
     # Если не переданы никакие аргументы, то
     # command.args будет None
     if command.args is None:
