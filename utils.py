@@ -2,6 +2,7 @@ import emoji #https://carpedm20.github.io/emoji/
 
 from pybit.unified_trading import HTTP
 from pybit.exceptions import InvalidRequestError
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload, Session
 
 from utils_db import *
@@ -134,13 +135,18 @@ def CheckExistCoin(user_id):
 def getStgData(stg_id):
     with Session(getEngine()) as session:
         query = session.query(Strategy).filter_by(id=stg_id).one()
-    ddict = {'answer': f'<b>{query.symbol}</b>:\n'}
-    if not query:
-        ddict['answer'] = ddict['answer'] + f'Нет\n'
-    else:
-        start_txt = f'Стратегия запушена '+ emoji.emojize(":check_mark_button:")+'\n' if query.start else f'Стратегия остановлена' + emoji.emojize(":stop_sign:")+'\n'
-        stg_txt = ''
-        ddict['answer'] = ddict['answer'] + start_txt + stg_txt
+        ddict = {'answer': f'<b>{query.symbol}</b>:\n'}
+        if not query:
+            ddict['answer'] = ddict['answer'] + f'Нет\n'
+        else:
+            start_txt = f'Торговля запушена '+ emoji.emojize(":check_mark_button:")+'\n' if query.start else f'Торговля остановлена' + emoji.emojize(":stop_sign:")+'\n'
+            stg_txt = ''
+            ddict['answer'] = ddict['answer'] + start_txt + stg_txt
+            if query.stg_dict is None:
+                ddict['answer'] = ddict['answer'] + f'Стратегия торговли не установлена\n'
+            else:
+                dJson = query.stg_dict
+                ddict['answer'] = ddict['answer'] + f"\nОписание: {dJson['desc']}\nШаг цены USDT: {dJson['step']}\nСумма сделки USDT: {dJson['amount']}"
     return ddict
 
 def changeStgStart(stg_id):

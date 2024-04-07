@@ -39,6 +39,7 @@ class Strategy(Base):
     symbol: Mapped[str] = mapped_column(nullable=False)
     limit: Mapped[int] = mapped_column(nullable=False)
     start: Mapped[bool] = mapped_column(nullable=False)
+    stg_name: Mapped[str] = mapped_column(nullable=True)
     stg_dict: Mapped[dict[str, Any]] = mapped_column(type_=JSON, nullable=True)
     user: Mapped['User'] = relationship(back_populates="stg")
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))

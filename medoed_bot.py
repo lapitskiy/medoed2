@@ -71,6 +71,7 @@ async def callback_addcoin(query: CallbackQuery, callback_data: MyCallback):
 @dp.callback_query(TradeCallback.filter(F.foo == 'stg'))
 async def callback_trade(query: CallbackQuery, callback_data: TradeCallback):
     ddict = getStgData(stg_id=callback_data.id)
+
     await query.message.edit_text(f"{ddict['answer']}", reply_markup=stg_keybord(stg_id=callback_data.id))
 
 @dp.callback_query(EditStgCallback.filter(F.foo == 'stg_edit'))
@@ -84,8 +85,24 @@ async def callback_edit_stg(query: CallbackQuery, callback_data: EditStgCallback
 async def callback_choose_stg(query: CallbackQuery, callback_data: ChooseStgCallback):
     result = {'answer': 'Выберите стратегию для получения помощи по настройке'}
     if callback_data.action in stg_dict:
-        result['answer'] = runStg(stg_name=callback_data.action)
+        result['answer'] = runStg(stg_name=callback_data.action, stg_id=callback_data.id)
     await query.message.edit_text(f"{result['answer']}", reply_markup=stg_choose_keybord(stg_id=callback_data.id))
+
+''' TRADE STRATEGY COMMAND'''
+
+@dp.message(Command('stgedit'))
+async def stgedit_command(message: Message, command: CommandObject):
+
+    # Если не переданы никакие аргументы, то
+    # command.args будет None
+    if command.args is None:
+        await message.answer(
+            "Ошибка: неправильный формат команды\n"
+        )
+        return
+
+    result = splitCommandStg(stgedit=command.args)
+    await message.answer(f"{result['answer']}")
 
 
 ''' TRADE COMMAND'''
