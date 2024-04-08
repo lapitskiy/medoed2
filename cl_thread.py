@@ -1,9 +1,22 @@
+import asyncio
+import time
+from asyncio import sleep
+
 import threading
-from fu_tools import *
+from contextlib import closing
+
+from sqlalchemy.orm import Session
+
+from models import Strategy
+from strategy import getStgObjFromClass
+from td_utils import *
+
 
 #
 # поток связанный с торговлей на бинанс
 #
+from utils_db import getEngine
+
 
 class StartTrade(threading.Thread):
     """StartTrade"""
@@ -15,10 +28,20 @@ class StartTrade(threading.Thread):
         self.start_trade()
 
     def start_trade(self):
-        #print('==========GO Trade Thread==========')
         while True:
-            pause
-            start_trade_stg(stg='10point')
+            time.sleep(1)
+            self.checkTradeStg()
+
+    def checkTradeStg(self):
+        with closing(Session(getEngine())) as session:
+            query = session.query(Strategy).all()
+            for stg in query:
+                if stg.start and stg.stg_name:
+                    stgObj = getStgObjFromClass(stg_id=stg.id)
+                    stgObj.Start()
+
+
+
 
 
 

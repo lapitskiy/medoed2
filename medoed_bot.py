@@ -13,6 +13,9 @@ from keyboards import MyCallback
 
 from strategy import *
 
+from cl_thread import *
+
+# print(f"query {query.user}")
 
 # Включаем логирование, чтобы не пропустить важные сообщения
 logging.basicConfig(level=logging.INFO)
@@ -20,6 +23,10 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token=config.bot_token.get_secret_value(), parse_mode="HTML")
 # Диспетчер
 dp = Dispatcher()
+
+# trade flow
+trade = StartTrade()
+
 
 ''' INLINE MAIN'''
 ''' INLINE MAIN'''
@@ -54,7 +61,7 @@ async def callback_settings(query: CallbackQuery, callback_data: MyCallback):
 ''' INLINE TRADE'''
 ''' INLINE TRADE'''
 
-# Filter callback by type and value of field :code:`foo`
+# меню монет
 @dp.callback_query(MyCallback.filter(F.foo == "trade"))
 async def callback_trade_settings(query: CallbackQuery, callback_data: MyCallback):
     result = CheckExistCoin(query.from_user.id)
@@ -67,26 +74,33 @@ async def callback_addcoin(query: CallbackQuery, callback_data: MyCallback):
 
 ''' TRADE ORM KEYBORD'''
 
-# Filter callback by type and value of field :code:`foo`
+# меню выбранной монеты!
 @dp.callback_query(TradeCallback.filter(F.foo == 'stg'))
 async def callback_trade(query: CallbackQuery, callback_data: TradeCallback):
-    ddict = getStgData(stg_id=callback_data.id)
+    answer = getStgData(stg_id=callback_data.id)
+    await query.message.edit_text(f"{answer}", reply_markup=stg_keybord(stg_id=callback_data.id))
 
-    await query.message.edit_text(f"{ddict['answer']}", reply_markup=stg_keybord(stg_id=callback_data.id))
-
+''' Меню конкретной монеты, запуск и выбор стратегии '''
 @dp.callback_query(EditStgCallback.filter(F.foo == 'stg_edit'))
 async def callback_edit_stg(query: CallbackQuery, callback_data: EditStgCallback):
+    result = ''
     if callback_data.action == 'start':
-        changeStgStart(stg_id=callback_data.id)
-    ddict = getStgData(stg_id=callback_data.id)
-    await query.message.edit_text(f"{ddict['answer']}", reply_markup=stg_keybord(stg_id=callback_data.id))
+        stgObj = getStgObjFromClass(stg_id=callback_data.id)
+        result = stgObj.StopStartStg()
+        print(f"stg_edit result {result}")
+    answer = getStgData(stg_id=callback_data.id)
+    print(f"answer {answer}")
+    await query.message.edit_text(f"{result}\n \n{answer}", reply_markup=stg_keybord(stg_id=callback_data.id))
 
 @dp.callback_query(ChooseStgCallback.filter(F.foo == 'stg_choose'))
 async def callback_choose_stg(query: CallbackQuery, callback_data: ChooseStgCallback):
     result = {'answer': 'Выберите стратегию для получения помощи по настройке'}
+    txt = ''
     if callback_data.action in stg_dict:
-        result['answer'] = runStg(stg_name=callback_data.action, stg_id=callback_data.id)
-    await query.message.edit_text(f"{result['answer']}", reply_markup=stg_choose_keybord(stg_id=callback_data.id))
+        stgObj = getStgObjFromClass(stg_id=callback_data.id)
+        txt = stgObj.returnHelpInfo()
+        #result['answer'] = helpStg(stg_name=callback_data.action, stg_id=callback_data.id)
+    await query.message.edit_text(f"{result['answer']}\n{txt}", reply_markup=stg_choose_keybord(stg_id=callback_data.id))
 
 ''' TRADE STRATEGY COMMAND'''
 
@@ -102,7 +116,7 @@ async def stgedit_command(message: Message, command: CommandObject):
         return
 
     result = splitCommandStg(stgedit=command.args)
-    await message.answer(f"{result['answer']}")
+    await message.answer(f"{result}")
 
 
 ''' TRADE COMMAND'''
@@ -179,8 +193,20 @@ async def add_bybit_api_command(
 
 # Запуск процесса поллинга новых апдейтов
 async def main():
+    trade = StartTrade()
+    trade.start()
+
     await dp.start_polling(bot)
+    #print('trade 1')
+    #await trade.start_trade()
+    #print('trade 2')
+    #await asyncio.gather(dp.start_polling(bot), trade.start_trade())
+
+
+
 
 if __name__ == "__main__":
     #trade()
     asyncio.run(main())
+
+

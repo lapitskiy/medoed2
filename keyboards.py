@@ -69,7 +69,7 @@ def stg_keybord(stg_id: int):
 def stg_choose_keybord(stg_id: int):
     builder = InlineKeyboardBuilder()
     ddict = {}
-    for key, value in stg_dict.items():
+    for key, value in stg_dict.items():  # from strategy import *
         builder.button(
             text=stg_dict[key]['name'],
             callback_data=ChooseStgCallback(foo='stg_choose', id=stg_id, action=key)
