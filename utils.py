@@ -5,11 +5,12 @@ from pybit.exceptions import InvalidRequestError
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload, Session
 
-from strategy import *
-from utils_db import *
+
 from models import User, Api, Strategy
 
 from config import config
+from strategy import getStgObjFromClass
+from utils_db import getEngine
 
 
 def dbAccCheck(id):

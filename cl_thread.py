@@ -1,20 +1,14 @@
-import asyncio
 import time
-from asyncio import sleep
-
 import threading
 from contextlib import closing
-
 from sqlalchemy.orm import Session
-
 from models import Strategy
-from strategy import getStgObjFromClass
-from td_utils import *
 
 
 #
 # поток связанный с торговлей на бинанс
 #
+from strategy import getStgObjFromClass
 from utils_db import getEngine
 
 

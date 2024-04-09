@@ -6,27 +6,34 @@ from aiogram import F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command, CommandObject, CommandStart
 
-from utils import *
-from keyboards import *
+from keyboards import MyCallback, TradeCallback, EditStgCallback, ChooseStgCallback, main_keybord, settings_keybord, \
+    trade_keybord, stg_keybord
 
-from keyboards import MyCallback
+from strategy import getStgObjFromClass, stg_dict
+from config import config
+from cl_thread import StartTrade
 
-from strategy import *
-
-from cl_thread import *
 
 # print(f"query {query.user}")
 
 # Включаем логирование, чтобы не пропустить важные сообщения
+from utils import dbAccCheck, CheckExistCoin, getStgData
+
 logging.basicConfig(level=logging.INFO)
 # Объект бота
 bot = Bot(token=config.bot_token.get_secret_value(), parse_mode="HTML")
+CHANNEL_ID = 1149862512
 # Диспетчер
 dp = Dispatcher()
 
 # trade flow
 trade = StartTrade()
 
+async def send_message():
+    # Используем функцию отправки сообщений
+    while True:
+        await asyncio.sleep(3)
+        await bot.send_message(377748138, 'test')
 
 ''' INLINE MAIN'''
 ''' INLINE MAIN'''
@@ -35,10 +42,11 @@ trade = StartTrade()
 @dp.message(Command("start"))
 async def add_bybit_api_command(message: Message, command: CommandObject):
         result = dbAccCheck(message.from_user.id)
+        #send_message()
+        print(f'chat id 2 {message.from_user.id}')
         await message.delete()
         await message.answer(f"Привет, <b>{message.from_user.username}</b>!",
                              reply_markup=main_keybord())
-        return
 
 # Filter callback by type and value of field :code:`foo`
 @dp.callback_query(MyCallback.filter(F.foo == "main_menu"))
@@ -83,24 +91,24 @@ async def callback_trade(query: CallbackQuery, callback_data: TradeCallback):
 ''' Меню конкретной монеты, запуск и выбор стратегии '''
 @dp.callback_query(EditStgCallback.filter(F.foo == 'stg_edit'))
 async def callback_edit_stg(query: CallbackQuery, callback_data: EditStgCallback):
-    result = ''
+    answer = {}
     if callback_data.action == 'start':
         stgObj = getStgObjFromClass(stg_id=callback_data.id)
-        result = stgObj.StopStartStg()
-        print(f"stg_edit result {result}")
-    answer = getStgData(stg_id=callback_data.id)
-    print(f"answer {answer}")
-    await query.message.edit_text(f"{result}\n \n{answer}", reply_markup=stg_keybord(stg_id=callback_data.id))
+        if stgObj:
+            return_dict = stgObj.StopStartStg(change=True)
+    print(f"answer stg_edit {answer}")
+    answer['answer'] = return_dict['answer'] + getStgData(stg_id=callback_data.id)
+    await query.message.edit_text(f"\n{answer['answer']}", reply_markup=stg_keybord(stg_id=callback_data.id))
 
 @dp.callback_query(ChooseStgCallback.filter(F.foo == 'stg_choose'))
 async def callback_choose_stg(query: CallbackQuery, callback_data: ChooseStgCallback):
-    result = {'answer': 'Выберите стратегию для получения помощи по настройке'}
-    txt = ''
-    if callback_data.action in stg_dict:
-        stgObj = getStgObjFromClass(stg_id=callback_data.id)
-        txt = stgObj.returnHelpInfo()
-        #result['answer'] = helpStg(stg_name=callback_data.action, stg_id=callback_data.id)
-    await query.message.edit_text(f"{result['answer']}\n{txt}", reply_markup=stg_choose_keybord(stg_id=callback_data.id))
+    answer = 'Выберите стратегию для получения помощи по настройке\n'
+    if callback_data.stg_name in stg_dict:
+        print(f'id call {callback_data.id}')
+        stgObj = getStgObjFromClass(stg_id=callback_data.id, stg_name=callback_data.stg_name)
+        answer = stgObj.returnHelpInfo(stg_id=callback_data.id)
+
+    await query.message.edit_text(f"{answer}\n", reply_markup=stg_choose_keybord(stg_id=callback_data.id))
 
 ''' TRADE STRATEGY COMMAND'''
 
@@ -116,6 +124,7 @@ async def stgedit_command(message: Message, command: CommandObject):
         return
 
     result = splitCommandStg(stgedit=command.args)
+    print(f'result {result}')
     await message.answer(f"{result}")
 
 
@@ -191,12 +200,15 @@ async def add_bybit_api_command(
 
 
 
+
 # Запуск процесса поллинга новых апдейтов
 async def main():
     trade = StartTrade()
     trade.start()
+    await asyncio.gather(dp.start_polling(bot), send_message())
+    #await dp.start_polling(bot)
 
-    await dp.start_polling(bot)
+
     #print('trade 1')
     #await trade.start_trade()
     #print('trade 2')

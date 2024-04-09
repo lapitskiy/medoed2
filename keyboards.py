@@ -3,9 +3,7 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
 from sqlalchemy.orm import Session, selectinload
 
 from utils_db import getEngine
-from models import User, Api, Strategy
-
-from strategy import *
+from models import User, Strategy
 
 
 class MyCallback(CallbackData, prefix="main"):
@@ -23,7 +21,7 @@ class EditStgCallback(CallbackData, prefix="trade_menu"):
 class ChooseStgCallback(CallbackData, prefix="trade_menu"):
     foo: str
     id: int
-    action: str
+    stg_name: str
 
 def main_keybord():
     builder = InlineKeyboardBuilder()
@@ -57,7 +55,7 @@ def stg_keybord(stg_id: int):
         )
     builder.button(
         text="Стратегия",
-        callback_data=ChooseStgCallback(foo="stg_choose", id=stg_id, action='')  # Value can be not packed to string inplace, because builder knows what to do with callback instance
+        callback_data=ChooseStgCallback(foo="stg_choose", id=stg_id, stg_name='')  # Value can be not packed to string inplace, because builder knows what to do with callback instance
     )
     builder.button(
         text="Назад",
@@ -72,7 +70,7 @@ def stg_choose_keybord(stg_id: int):
     for key, value in stg_dict.items():  # from strategy import *
         builder.button(
             text=stg_dict[key]['name'],
-            callback_data=ChooseStgCallback(foo='stg_choose', id=stg_id, action=key)
+            callback_data=ChooseStgCallback(foo='stg_choose', id=stg_id, stg_name=key)
             # Value can be not packed to string inplace, because builder knows what to do with callback instance
         )
 
