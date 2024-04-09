@@ -24,6 +24,7 @@ class User(Base):
     user: Mapped[int] = mapped_column(sa.BigInteger, unique=True)
     api: Mapped[List[Api]] = relationship(back_populates="user")
     stg: Mapped[List[Strategy]] = relationship(back_populates="user")
+    teletaip: Mapped[bool] = mapped_column(default=False, nullable=False)
 
 class Api(Base):
     __tablename__ = 'api'
@@ -43,4 +44,10 @@ class Strategy(Base):
     stg_dict: Mapped[dict[str, Any]] = mapped_column(type_=JSON, nullable=True)
     user: Mapped['User'] = relationship(back_populates="stg")
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+
+class TradeHistory(Base):
+    __tablename__ = 'history'
+    id: Mapped[int] = mapped_column(Identity(always=True), primary_key=True)
+    price: Mapped[str] = mapped_column(nullable=False)
+    price_tx: Mapped[int] = mapped_column(sa.BigInteger, unique=True)
 

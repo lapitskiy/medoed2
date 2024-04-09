@@ -12,6 +12,9 @@ from config import config
 from strategy import getStgObjFromClass
 from utils_db import getEngine
 
+def create_session():
+    Session = sessionmaker(getEngine())
+    return Session()
 
 def dbAccCheck(id):
     with Session(getEngine()) as session:

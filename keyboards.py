@@ -23,6 +23,11 @@ class ChooseStgCallback(CallbackData, prefix="trade_menu"):
     id: int
     stg_name: str
 
+class ReportCallback(CallbackData, prefix="report_menu"):
+    foo: str
+    id: int
+    stg_name: str
+
 def main_keybord():
     builder = InlineKeyboardBuilder()
     builder.button(
@@ -39,6 +44,28 @@ def main_keybord():
     )
     return builder.as_markup()
 
+''' REPORT KEYBORD '''
+
+def report_keybord(stg_id: int):
+    builder = InlineKeyboardBuilder()
+    session = create_session()
+    query = session.query(Strategy).filter_by(id=stg_id).one()
+    txt = 'Телетайп ВКЛ' if query.user.teletaip else 'Телетайп ВЫКЛ'
+    session.close()
+    builder.button(
+        text=txt,
+        callback_data=ReportCallback(foo='report', id=stg_id, action='teletipe')
+        # Value can be not packed to string inplace, because builder knows what to do with callback instance
+    )
+    builder.button(
+        text="Скачать отчет",
+        callback_data=ReportCallback(foo="report", id=stg_id, action='reportpdf')  # Value can be not packed to string inplace, because builder knows what to do with callback instance
+    )
+    builder.button(
+        text="Назад",
+        callback_data=MyCallback(foo="main_menu")  # Value can be not packed to string inplace, because builder knows what to do with callback instance
+    )
+    return builder.as_markup()
 
 ''' STG KEYBORD '''
 

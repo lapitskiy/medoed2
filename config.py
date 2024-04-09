@@ -1,6 +1,8 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import SecretStr
 
+from utils import create_session
+
 
 class SecretSettings(BaseSettings):
     # Желательно вместо str использовать SecretStr
@@ -18,7 +20,11 @@ class SecretSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
 
 class Settings():
-    chat_id = None
+    chat_id: int = None
+    message: str = None
+
+    def __init__(self):
+        update_message = False
 
 # При импорте файла сразу создастся
 # и провалидируется объект конфига,

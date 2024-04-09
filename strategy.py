@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from pybit.unified_trading import HTTP
 
+from utils import create_session
 from utils_db import getEngine
 from models import Strategy
 
@@ -59,10 +60,6 @@ class Api_Trade_Method():
             symbol=symbol,
         )
 
-def create_session():
-    Session = sessionmaker(getEngine())
-    return Session()
-
 
 class Strategy_Step(Api_Trade_Method):
     symbol: str
@@ -85,17 +82,21 @@ class Strategy_Step(Api_Trade_Method):
             lastPrice = round(float(all_price['lastPrice']),2)
             stepPrice = float(self.stg_dict['step'])
             dev = round(float(lastPrice % stepPrice),2)
-            print(f'tyt:')
             if dev == 0:
-                self.trySellBuy()
-
+                self.trySellBuy(lastPrice, stepPrice)
+                config.update = True
+                config.message = f'{lastPrice} - step {stepPrice}'
                 print(f'{lastPrice} - step {stepPrice}')
         else:
             print(f"answer {ddict['answer']}")
             #simple_message_from_threading(answer=ddict['answer'])
 
-    def tryBuySell(self):
-        pass
+    def tryBuySell(self, lastPrice, stepPrice):
+        - проверка нет ли по такой цене уже покупи
+        - если уже была покупка, смотрим есть ли лимит на покупку и покупаем или нет
+        - если купили ставим стоп на шаг выше
+        - если это вторая покупка по цене, отменяем первый стоп и и ставим новый умноженный на 2
+        -
 
 
 

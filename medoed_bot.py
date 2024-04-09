@@ -31,12 +31,13 @@ trade = StartTrade()
 
 async def send_message():
     # Используем функцию отправки сообщений
+    session = create_session()
     while True:
-        await asyncio.sleep(3)
-        print(f'id {config}')
-        if config.chat_id:
+        query = session.query(User).filter_by(name=config.chat_id).one()
+        if config.chat_id and query.teletaip and config.update_message:
+            config.update_message = False
             await asyncio.sleep(3)
-            await bot.send_message(config.chat_id, 'test')
+            await bot.send_message(config.chat_id, config.message)
 
 ''' INLINE MAIN'''
 ''' INLINE MAIN'''
@@ -59,7 +60,7 @@ async def callback_main_menu(query: CallbackQuery, callback_data: MyCallback):
 # Filter callback by type and value of field :code:`foo`
 @dp.callback_query(MyCallback.filter(F.foo == "report"))
 async def callback_report(query: CallbackQuery, callback_data: MyCallback):
-    await query.message.edit_text(f"Сводка будет тут", reply_markup=main_keybord())
+    await query.message.edit_text(f"Телетайп и отчеты по торговле", reply_markup=report_keybord())
 
 # Filter callback by type and value of field :code:`foo`
 @dp.callback_query(MyCallback.filter(F.foo == "settings"))
@@ -67,15 +68,34 @@ async def callback_settings(query: CallbackQuery, callback_data: MyCallback):
     #await query.message.delete()
     await query.message.edit_text(f"Настройки", reply_markup=settings_keybord())
 
+''' INLINE REPORT'''
+''' INLINE REPORT'''
+''' INLINE REPORT'''
+
+# Filter callback by type and value of field :code:`foo`
+@dp.callback_query(ReportCallback.filter(F.foo == "report"))
+async def callback_report(query: CallbackQuery, callback_data: MyCallback):
+    if callback_data.action == 'teletipe':
+        session = create_session()
+        query = session.query(Strategy).filter_by(id=callback_data.stg_id).one()
+        answer = 'Телетайп ВКЛ' if query.user.teletaip else 'Телетайп ВЫКЛ'
+        session.close()
+    if callback_data.action == 'reportpdf':
+        pass
+    await query.message.edit_text(f"{result['answer']}\n", reply_markup=trade_keybord(user_id=query.from_user.id))
+
+
 ''' INLINE TRADE'''
 ''' INLINE TRADE'''
 ''' INLINE TRADE'''
 
 # меню монет
+
 @dp.callback_query(MyCallback.filter(F.foo == "trade"))
 async def callback_trade_settings(query: CallbackQuery, callback_data: MyCallback):
     result = CheckExistCoin(query.from_user.id)
     await query.message.edit_text(f"{result['answer']}\n", reply_markup=trade_keybord(user_id=query.from_user.id))
+
 
 # Filter callback by type and value of field :code:`foo`
 @dp.callback_query(MyCallback.filter(F.foo == "addcoin"))
