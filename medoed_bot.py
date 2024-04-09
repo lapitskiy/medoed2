@@ -10,7 +10,7 @@ from keyboards import MyCallback, TradeCallback, EditStgCallback, ChooseStgCallb
     trade_keybord, stg_keybord
 
 from strategy import getStgObjFromClass, stg_dict
-from config import config
+from config import config, secret_config
 from cl_thread import StartTrade
 
 
@@ -21,8 +21,8 @@ from utils import dbAccCheck, CheckExistCoin, getStgData
 
 logging.basicConfig(level=logging.INFO)
 # Объект бота
-bot = Bot(token=config.bot_token.get_secret_value(), parse_mode="HTML")
-CHANNEL_ID = 1149862512
+bot = Bot(token=secret_config.bot_token.get_secret_value(), parse_mode="HTML")
+
 # Диспетчер
 dp = Dispatcher()
 
@@ -33,7 +33,10 @@ async def send_message():
     # Используем функцию отправки сообщений
     while True:
         await asyncio.sleep(3)
-        await bot.send_message(377748138, 'test')
+        print(f'id {config}')
+        if config.chat_id:
+            await asyncio.sleep(3)
+            await bot.send_message(config.chat_id, 'test')
 
 ''' INLINE MAIN'''
 ''' INLINE MAIN'''
@@ -42,9 +45,8 @@ async def send_message():
 @dp.message(Command("start"))
 async def add_bybit_api_command(message: Message, command: CommandObject):
         result = dbAccCheck(message.from_user.id)
-        #send_message()
-        print(f'chat id 2 {message.from_user.id}')
-        await message.delete()
+        config.chat_id = message.from_user.id
+        #await message.delete()
         await message.answer(f"Привет, <b>{message.from_user.username}</b>!",
                              reply_markup=main_keybord())
 

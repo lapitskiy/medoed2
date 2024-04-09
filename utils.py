@@ -14,28 +14,14 @@ from utils_db import getEngine
 
 
 def dbAccCheck(id):
-    ddict = {}
-
-    print(f"id {id}")
-    print(f"user {config.user_db.get_secret_value()}")
-    print(f"pass {config.pass_db.get_secret_value()}")
-    print(f"database_name {config.name_db.get_secret_value()}")
-    print(f"host {config.host_db.get_secret_value()}")
-
     with Session(getEngine()) as session:
         statement = select(User).filter_by(user=id)
         user_obj = session.scalars(statement).all()
-        #query = session.query(User).filter_by(user=id)
-        print(f" query {user_obj}")
         if not user_obj:
-            print(f" добавляем акк")
-            # Вставляем новую запись в таблицу
-            # Создаем объект MetaData
             session.add(User(user=id))
             session.commit()
             ddict = {'answer': 'Ваш аккаунт создан'}
         else:
-        # Печатаем результат запроса
             ddict = {'answer': 'Ваш аккаунт уже активирован'}
     return ddict
 
