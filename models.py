@@ -50,4 +50,5 @@ class TradeHistory(Base):
     id: Mapped[int] = mapped_column(Identity(always=True), primary_key=True)
     price: Mapped[str] = mapped_column(nullable=False)
     price_tx: Mapped[int] = mapped_column(sa.BigInteger, unique=True)
+    takeprofit_tx: Mapped[int] = mapped_column(sa.BigInteger, unique=True)
 
