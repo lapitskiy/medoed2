@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload, Session
 
 from models import User, Api, Strategy
 
-from config import config
+from config import config, secret_config
 from strategy import getStgObjFromClass
 from utils_db import getEngine
 

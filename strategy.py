@@ -10,8 +10,7 @@ from pybit.unified_trading import HTTP
 
 from utils import create_session
 from utils_db import getEngine
-from models import Strategy
-
+from models import Strategy, TradeHistory
 
 stg_dict = {
     'ladder_stg':
@@ -60,6 +59,17 @@ class Api_Trade_Method():
             symbol=symbol,
         )
 
+    def BuyMarket(self, symbol: str, qty: int):
+        session.place_order(
+            category="spot",
+            symbol=symbol,
+            side="Buy",
+            orderType="Market",
+            qty=qty,
+            isLeverage=0,
+            orderFilter="Order",
+        )
+
 
 class Strategy_Step(Api_Trade_Method):
     symbol: str
@@ -92,11 +102,18 @@ class Strategy_Step(Api_Trade_Method):
             #simple_message_from_threading(answer=ddict['answer'])
 
     def tryBuySell(self, lastPrice, stepPrice):
-        - проверка нет ли по такой цене уже покупи
-        - если уже была покупка, смотрим есть ли лимит на покупку и покупаем или нет
-        - если купили ставим стоп на шаг выше
-        - если это вторая покупка по цене, отменяем первый стоп и и ставим новый умноженный на 2
-        -
+        session = create_session()
+        tradeQ = session.query(TradeHistory).filter(price=lastPrice).all()
+
+        if query and stg_dict['deals'] >= tradeQ:
+            pass
+        else:
+            
+            self.BuyMarket(symbol, stg_dict['limit'])
+            session.commit()
+            self.StopLimit(symbol, tx)
+        #- если купили ставим стоп на шаг выше
+        #- если это вторая покупка по цене, отменяем первый стоп и и ставим новый умноженный на 2
 
 
 

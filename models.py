@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import List, Optional
 import sqlalchemy as sa
 
-from sqlalchemy import Column, Integer, String, ForeignKey, Identity, JSON, MetaData, Any, BigInteger
+from sqlalchemy import Column, Integer, String, ForeignKey, Identity, JSON, MetaData, Any, BigInteger, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 
 from sqlalchemy.orm import Mapped
@@ -24,7 +24,8 @@ class User(Base):
     user: Mapped[int] = mapped_column(sa.BigInteger, unique=True)
     api: Mapped[List[Api]] = relationship(back_populates="user")
     stg: Mapped[List[Strategy]] = relationship(back_populates="user")
-    teletaip: Mapped[bool] = mapped_column(default=False, nullable=False)
+    tx: Mapped[List[TradeHistory]] = relationship(back_populates="user")
+    teletaip: Mapped[bool] = mapped_column(server_default='false')
 
 class Api(Base):
     __tablename__ = 'api'
@@ -44,6 +45,7 @@ class Strategy(Base):
     stg_dict: Mapped[dict[str, Any]] = mapped_column(type_=JSON, nullable=True)
     user: Mapped['User'] = relationship(back_populates="stg")
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    tx: Mapped[List[TradeHistory]] = relationship(back_populates="strategy")
 
 class TradeHistory(Base):
     __tablename__ = 'history'
@@ -51,4 +53,8 @@ class TradeHistory(Base):
     price: Mapped[str] = mapped_column(nullable=False)
     price_tx: Mapped[int] = mapped_column(sa.BigInteger, unique=True)
     takeprofit_tx: Mapped[int] = mapped_column(sa.BigInteger, unique=True)
+    user: Mapped['User'] = relationship(back_populates="history")
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    stg: Mapped['Strategy'] = relationship(back_populates="tx")
+    stg_id: Mapped[int] = mapped_column(ForeignKey("strategy.id"))
 

@@ -36,7 +36,6 @@ async def send_message():
         query = session.query(User).filter_by(name=config.chat_id).one()
         if config.chat_id and query.teletaip and config.update_message:
             config.update_message = False
-            await asyncio.sleep(3)
             await bot.send_message(config.chat_id, config.message)
 
 ''' INLINE MAIN'''
