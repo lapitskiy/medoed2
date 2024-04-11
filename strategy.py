@@ -108,7 +108,7 @@ class Strategy_Step(Api_Trade_Method):
         if query and stg_dict['deals'] >= tradeQ:
             pass
         else:
-            
+
             self.BuyMarket(symbol, stg_dict['limit'])
             session.commit()
             self.StopLimit(symbol, tx)
