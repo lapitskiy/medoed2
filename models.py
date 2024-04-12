@@ -45,15 +45,15 @@ class Strategy(Base):
     stg_dict: Mapped[dict[str, Any]] = mapped_column(type_=JSON, nullable=True)
     user: Mapped['User'] = relationship(back_populates="stg")
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    tx: Mapped[List[TradeHistory]] = relationship(back_populates="strategy")
+    tx: Mapped[List[TradeHistory]] = relationship(back_populates="stg")
 
 class TradeHistory(Base):
     __tablename__ = 'history'
     id: Mapped[int] = mapped_column(Identity(always=True), primary_key=True)
     price: Mapped[str] = mapped_column(nullable=False)
-    price_tx: Mapped[int] = mapped_column(sa.BigInteger, unique=True)
-    takeprofit_tx: Mapped[int] = mapped_column(sa.BigInteger, unique=True)
-    user: Mapped['User'] = relationship(back_populates="history")
+    tx_id: Mapped[int] = mapped_column(sa.BigInteger, unique=True)
+    tx_dict: Mapped[dict[str, Any]] = mapped_column(type_=JSON, nullable=True)
+    user: Mapped['User'] = relationship(back_populates="tx")
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     stg: Mapped['Strategy'] = relationship(back_populates="tx")
     stg_id: Mapped[int] = mapped_column(ForeignKey("strategy.id"))

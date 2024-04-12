@@ -3,8 +3,7 @@ import emoji #https://carpedm20.github.io/emoji/
 from pybit.unified_trading import HTTP
 from pybit.exceptions import InvalidRequestError
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload, Session
-
+from sqlalchemy.orm import selectinload, Session, sessionmaker
 
 from models import User, Api, Strategy
 

@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from pybit.unified_trading import HTTP
 
-from utils import create_session
 from utils_db import getEngine
 from models import Strategy, TradeHistory
 
@@ -23,6 +22,10 @@ stg_dict = {
             'deals': 1,
             'exch': ''
         }}
+
+def create_session():
+    Session = sessionmaker(getEngine())
+    return Session()
 
 def splitCommandStg(stgedit: str):
     try:
@@ -93,28 +96,28 @@ class Strategy_Step(Api_Trade_Method):
             stepPrice = float(self.stg_dict['step'])
             dev = round(float(lastPrice % stepPrice),2)
             if dev == 0:
-                self.trySellBuy(lastPrice, stepPrice)
-                config.update = True
-                config.message = f'{lastPrice} - step {stepPrice}'
-                print(f'{lastPrice} - step {stepPrice}')
+                self.tryBuySell(lastPrice, stepPrice)
+                print(f'! цена шага достигнута - {lastPrice} - step {stepPrice}')
         else:
             print(f"answer {ddict['answer']}")
             #simple_message_from_threading(answer=ddict['answer'])
 
     def tryBuySell(self, lastPrice, stepPrice):
         session = create_session()
-        tradeQ = session.query(TradeHistory).filter(price=lastPrice).all()
+        tradeQ = session.query(TradeHistory).filter_by(price=lastPrice).all()
 
-        if query and stg_dict['deals'] >= tradeQ:
-            pass
+        if query and stg_dict['deals'] >= tradeQ.count():
+            config.message = f"[" +emoji.emojize(':red_cross:')+ f"]{lastPrice} по этой цене уже {stg_dict['deals']} покупок"
+            config.update_message = True
         else:
-
-            self.BuyMarket(symbol, stg_dict['limit'])
+            self.BuyMarket(tradeQ.stg.symbol, stg_dict['limit'])
             session.commit()
             self.StopLimit(symbol, tx)
+            config.message = f"[" +emoji.emojize(':green_check:')+ f"] Куплено {lastPrice}"
+            config.update_message = True
         #- если купили ставим стоп на шаг выше
         #- если это вторая покупка по цене, отменяем первый стоп и и ставим новый умноженный на 2
-
+        session.close()
 
 
     '''telegram bot func'''
@@ -127,7 +130,6 @@ class Strategy_Step(Api_Trade_Method):
             if query.stg_dict:
                 if change is not None:
                     query.start = False if query.start else True
-                    print(f"tyt1 {query.start}")
                 stg_dict = query.stg_dict
                 step = str(stg_dict['step'])
                 if not stg_dict['step'] or float(step.replace(",", ".")) <= 0.0:
@@ -146,7 +148,7 @@ class Strategy_Step(Api_Trade_Method):
                 return_dict['answer'] = '<b>Нельзя запустить ' + emoji.emojize(
                     ":backhand_index_pointing_left:") + '</b>, у вас не указана стратегия\n'
             return_dict['start'] = query.start
-            print(f"start {return_dict['start']}")
+            #print(f"start {return_dict['start']}")
             session.commit()
         return return_dict
 

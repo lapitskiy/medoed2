@@ -5,11 +5,13 @@ from aiogram import Bot, Dispatcher
 from aiogram import F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command, CommandObject, CommandStart
+from sqlalchemy.exc import NoResultFound
 
 from keyboards import MyCallback, TradeCallback, EditStgCallback, ChooseStgCallback, main_keybord, settings_keybord, \
-    trade_keybord, stg_keybord
+    trade_keybord, stg_keybord, ReportCallback, report_keybord, stg_choose_keybord
+from models import User
 
-from strategy import getStgObjFromClass, stg_dict
+from strategy import getStgObjFromClass, stg_dict, splitCommandStg
 from config import config, secret_config
 from cl_thread import StartTrade
 
@@ -17,7 +19,7 @@ from cl_thread import StartTrade
 # print(f"query {query.user}")
 
 # Включаем логирование, чтобы не пропустить важные сообщения
-from utils import dbAccCheck, CheckExistCoin, getStgData
+from utils import dbAccCheck, CheckExistCoin, getStgData, create_session, AddCoin, CheckApiEx, AddApiByBit
 
 logging.basicConfig(level=logging.INFO)
 # Объект бота
@@ -27,23 +29,31 @@ bot = Bot(token=secret_config.bot_token.get_secret_value(), parse_mode="HTML")
 dp = Dispatcher()
 
 # trade flow
-trade = StartTrade()
+#trade = StartTrade()
 
 async def send_message():
     # Используем функцию отправки сообщений
     session = create_session()
     while True:
-        query = session.query(User).filter_by(name=config.chat_id).one()
         if config.chat_id and query.teletaip and config.update_message:
             config.update_message = False
-            await bot.send_message(config.chat_id, config.message)
+            await bot.send_message(config.chat_id, 'config.message')
+        #try:
+         #   pass
+            #query = session.query(User).filter_by(user=config.chat_id).one()
+            #if config.chat_id and query.teletaip and config.update_message:
+            #    config.update_message = False
+            #    await bot.send_message(config.chat_id, config.message)
+        #except NoResultFound:
+        #    pass
+
 
 ''' INLINE MAIN'''
 ''' INLINE MAIN'''
 ''' INLINE MAIN'''
 
 @dp.message(Command("start"))
-async def add_bybit_api_command(message: Message, command: CommandObject):
+async def start_command(message: Message, command: CommandObject):
         result = dbAccCheck(message.from_user.id)
         config.chat_id = message.from_user.id
         #await message.delete()
@@ -112,13 +122,14 @@ async def callback_trade(query: CallbackQuery, callback_data: TradeCallback):
 ''' Меню конкретной монеты, запуск и выбор стратегии '''
 @dp.callback_query(EditStgCallback.filter(F.foo == 'stg_edit'))
 async def callback_edit_stg(query: CallbackQuery, callback_data: EditStgCallback):
-    answer = {}
+    answer = {'answer':''}
     if callback_data.action == 'start':
         stgObj = getStgObjFromClass(stg_id=callback_data.id)
         if stgObj:
-            return_dict = stgObj.StopStartStg(change=True)
-    print(f"answer stg_edit {answer}")
-    answer['answer'] = return_dict['answer'] + getStgData(stg_id=callback_data.id)
+            answer = stgObj.StopStartStg(change=True)
+        else:
+            answer = {'answer':'Создайте сначала <u>стратегию</u> для запуска!\n\n'}
+    answer['answer'] = answer['answer'] + getStgData(stg_id=callback_data.id)
     await query.message.edit_text(f"\n{answer['answer']}", reply_markup=stg_keybord(stg_id=callback_data.id))
 
 @dp.callback_query(ChooseStgCallback.filter(F.foo == 'stg_choose'))
@@ -226,20 +237,16 @@ async def add_bybit_api_command(
 async def main():
     trade = StartTrade()
     trade.start()
-    await asyncio.gather(dp.start_polling(bot), send_message())
-    #await dp.start_polling(bot)
+    await asyncio.create_task(dp.start_polling(bot))
+    await asyncio.create_task(send_message())
 
+    #await asyncio.gather(dp.start_polling(bot), send_message())
 
-    #print('trade 1')
-    #await trade.start_trade()
-    #print('trade 2')
-    #await asyncio.gather(dp.start_polling(bot), trade.start_trade())
 
 
 
 
 if __name__ == "__main__":
-    #trade()
     asyncio.run(main())
 
 

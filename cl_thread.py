@@ -23,7 +23,6 @@ class StartTrade(threading.Thread):
 
     def start_trade(self):
         while True:
-            time.sleep(1)
             self.checkTradeStg()
 
     def checkTradeStg(self):

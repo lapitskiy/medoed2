@@ -2,6 +2,7 @@ from aiogram.filters.callback_data import CallbackData
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
 from sqlalchemy.orm import Session, selectinload
 
+from strategy import stg_dict
 from utils_db import getEngine
 from models import User, Strategy
 
