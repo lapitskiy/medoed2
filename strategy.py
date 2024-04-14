@@ -1,12 +1,14 @@
+import math
 import time
 from contextlib import closing
 from aiogram import types
 
 import emoji #https://carpedm20.github.io/emoji/
 from sqlalchemy import select, Null, update
+from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session, sessionmaker
 
-from pybit.unified_trading import HTTP
+from pybit.unified_trading import HTTP #https://www.bybit.com/en/help-center/s/webform?language=en_US
 
 from utils_db import getEngine
 from models import Strategy, TradeHistory
@@ -55,6 +57,19 @@ def getStgObjFromClass(stg_id: int, stg_name: str = None) -> classmethod:
 
 class Api_Trade_Method():
     # https://bybit-exchange.github.io/docs/v5/intro
+    def makeSession(self, stg_id: int):
+        session = create_session()
+        api = session.query(Strategy).filter_by(id=stg_id).one()
+        for bybit in api.user.api:
+            bybit_key = bybit.bybit_key
+            bybit_secret = bybit.bybit_secret
+        session_api = HTTP(
+            testnet=True,
+            api_key=bybit_key,
+            api_secret=bybit_secret
+        )
+        return session_api
+
     def getCurrentPrice(self, symbol: str):
         session = HTTP(testnet=False)
         return session.get_tickers(
@@ -62,13 +77,15 @@ class Api_Trade_Method():
             symbol=symbol,
         )
 
-    def BuyMarket(self, symbol: str, qty: int):
+    def BuyMarket(self, symbol: str, qty: int, stg_id: int):
+
+        session = self.makeSession(stg_id=stg_id)
         session.place_order(
             category="spot",
             symbol=symbol,
             side="Buy",
             orderType="Market",
-            qty=qty,
+            qty="10",
             isLeverage=0,
             orderFilter="Order",
         )
@@ -88,16 +105,22 @@ class Strategy_Step(Api_Trade_Method):
         # тут же ставиться стоп на цену шага выше
         # запоминается время покупки в базу и стоп по этой покупке
         # если происходит покупка снова по этой цене, а старый тейкпрофит еще в базе, удаляется старый тейкпрофит и ставится новый двойной
+        time.sleep(2)
         ddict = self.StopStartStg()
         if ddict['start'] == True:
+            decimal_part = str(self.stg_dict['step'])
+            decimal_part = decimal_part.split('.')[1]
             ticker = self.getCurrentPrice(symbol=self.symbol)
             all_price = ticker['result']['list'][0]
-            lastPrice = float(all_price['lastPrice'])
+            print(f"lastprice {all_price['lastPrice']}")
+            lastPrice = round(float(all_price['lastPrice']), len(decimal_part))
             stepPrice = float(self.stg_dict['step'])
-            dev = round(float(lastPrice % stepPrice),2)
-            print(f'dev {dev} lastprice {lastPrice} steprpice {stepPrice}')
-            if dev == 0:
-                #self.tryBuySell(lastPrice, stepPrice)
+            # Вывод количества символов после точки
+            dev = str(lastPrice / stepPrice).split('.')[1]
+            #dev = round(float(lastPrice) % float(stepPrice),len(decimal_part))
+            print(f'dev {dev} lastprice {lastPrice} steprpice {stepPrice} | / {float(lastPrice / stepPrice)} |decimal part {decimal_part} len {len(decimal_part)}')
+            if int(dev[0]) == 0:
+                self.tryBuySell(lastPrice, stepPrice)
                 print(f'! цена шага достигнута - {lastPrice} - step {stepPrice}')
         else:
             print(f"answer {ddict['answer']}")
@@ -106,15 +129,24 @@ class Strategy_Step(Api_Trade_Method):
     def tryBuySell(self, lastPrice, stepPrice):
         session = create_session()
         tradeQ = session.query(TradeHistory).filter_by(price=str(lastPrice)).all()
+        if tradeQ:
+            lastTX = session.query(TradeHistory).order_by(TradeHistory.id.desc()).one()
+            if tradeQ and stg_dict['deals'] >= tradeQ.count() or lastTX.price == str(lastPrice):
+                config.message = f"[" +emoji.emojize(':red_cross:')+ f"]{lastPrice} по этой цене уже совершены покупки"
+                config.update_message = True
+            else:
+                self.BuyMarket(tradeQ.stg.symbol, stg_dict['amount'])
+                session.commit()
 
-        if query and stg_dict['deals'] >= tradeQ.count():
-            config.message = f"[" +emoji.emojize(':red_cross:')+ f"]{lastPrice} по этой цене уже {stg_dict['deals']} покупок"
-            config.update_message = True
+                self.StopLimit(symbol, tx)
+                config.message = f"[" +emoji.emojize(':green_check:')+ f"] Куплено {lastPrice}"
+                config.update_message = True
         else:
-            self.BuyMarket(tradeQ.stg.symbol, stg_dict['limit'])
+            self.BuyMarket(self.symbol, self.stg_dict['amount'], stg_id=self.stg_id)
             session.commit()
+
             self.StopLimit(symbol, tx)
-            config.message = f"[" +emoji.emojize(':green_check:')+ f"] Куплено {lastPrice}"
+            config.message = f"[" + emoji.emojize(':green_check:') + f"] Куплено {lastPrice}"
             config.update_message = True
         #- если купили ставим стоп на шаг выше
         #- если это вторая покупка по цене, отменяем первый стоп и и ставим новый умноженный на 2
