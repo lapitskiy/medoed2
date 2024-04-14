@@ -92,11 +92,12 @@ class Strategy_Step(Api_Trade_Method):
         if ddict['start'] == True:
             ticker = self.getCurrentPrice(symbol=self.symbol)
             all_price = ticker['result']['list'][0]
-            lastPrice = round(float(all_price['lastPrice']),2)
+            lastPrice = float(all_price['lastPrice'])
             stepPrice = float(self.stg_dict['step'])
             dev = round(float(lastPrice % stepPrice),2)
+            print(f'dev {dev} lastprice {lastPrice} steprpice {stepPrice}')
             if dev == 0:
-                self.tryBuySell(lastPrice, stepPrice)
+                #self.tryBuySell(lastPrice, stepPrice)
                 print(f'! цена шага достигнута - {lastPrice} - step {stepPrice}')
         else:
             print(f"answer {ddict['answer']}")
@@ -104,7 +105,7 @@ class Strategy_Step(Api_Trade_Method):
 
     def tryBuySell(self, lastPrice, stepPrice):
         session = create_session()
-        tradeQ = session.query(TradeHistory).filter_by(price=lastPrice).all()
+        tradeQ = session.query(TradeHistory).filter_by(price=str(lastPrice)).all()
 
         if query and stg_dict['deals'] >= tradeQ.count():
             config.message = f"[" +emoji.emojize(':red_cross:')+ f"]{lastPrice} по этой цене уже {stg_dict['deals']} покупок"

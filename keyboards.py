@@ -3,6 +3,7 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
 from sqlalchemy.orm import Session, selectinload
 
 from strategy import stg_dict
+from utils import create_session
 from utils_db import getEngine
 from models import User, Strategy
 
@@ -27,7 +28,7 @@ class ChooseStgCallback(CallbackData, prefix="trade_menu"):
 class ReportCallback(CallbackData, prefix="report_menu"):
     foo: str
     id: int
-    stg_name: str
+    action: str
 
 def main_keybord():
     builder = InlineKeyboardBuilder()
@@ -47,20 +48,21 @@ def main_keybord():
 
 ''' REPORT KEYBORD '''
 
-def report_keybord(stg_id: int):
+def report_keybord(id):
     builder = InlineKeyboardBuilder()
     session = create_session()
-    query = session.query(Strategy).filter_by(id=stg_id).one()
-    txt = 'Телетайп ВКЛ' if query.user.teletaip else 'Телетайп ВЫКЛ'
+    print(id)
+    query = session.query(User).filter_by(user=id).one()
+    txt = 'Телетайп ВКЛ' if query.teletaip else 'Телетайп ВЫКЛ'
     session.close()
     builder.button(
         text=txt,
-        callback_data=ReportCallback(foo='report', id=stg_id, action='teletipe')
+        callback_data=ReportCallback(foo='report', id=id, action='teletipe')
         # Value can be not packed to string inplace, because builder knows what to do with callback instance
     )
     builder.button(
         text="Скачать отчет",
-        callback_data=ReportCallback(foo="report", id=stg_id, action='reportpdf')  # Value can be not packed to string inplace, because builder knows what to do with callback instance
+        callback_data=ReportCallback(foo="report", id=id, action='reportpdf')  # Value can be not packed to string inplace, because builder knows what to do with callback instance
     )
     builder.button(
         text="Назад",

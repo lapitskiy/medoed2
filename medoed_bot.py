@@ -69,7 +69,7 @@ async def callback_main_menu(query: CallbackQuery, callback_data: MyCallback):
 # Filter callback by type and value of field :code:`foo`
 @dp.callback_query(MyCallback.filter(F.foo == "report"))
 async def callback_report(query: CallbackQuery, callback_data: MyCallback):
-    await query.message.edit_text(f"Телетайп и отчеты по торговле", reply_markup=report_keybord())
+    await query.message.edit_text(f"Телетайп и отчеты по торговле", reply_markup=report_keybord(query.from_user.id))
 
 # Filter callback by type and value of field :code:`foo`
 @dp.callback_query(MyCallback.filter(F.foo == "settings"))
