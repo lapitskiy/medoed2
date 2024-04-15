@@ -12,6 +12,7 @@ from pybit.unified_trading import HTTP #https://www.bybit.com/en/help-center/s/w
 
 from utils_db import getEngine
 from models import Strategy, TradeHistory
+from config import config
 
 stg_dict = {
     'ladder_stg':
@@ -22,6 +23,8 @@ stg_dict = {
             'step': '0.0',
             'amount': 0,
             'deals': 1,
+            'ctg': 'spot',
+            'x': 1,
             'exch': ''
         }}
 
@@ -45,8 +48,7 @@ def getStgObjFromClass(stg_id: int, stg_name: str = None) -> classmethod:
         session = create_session()
         query = session.query(Strategy).filter_by(id=stg_id).one()
         if query.stg_name == 'ladder_stg':
-            createStgObj = Strategy_Step(stg_id=stg_id)
-            createStgObj.stg_id = stg_id
+            createStgObj = Strategy_Step(stg_id=stg_id, user_id=query.user.id)
             session.close()
             return createStgObj
     if stg_name:
@@ -56,6 +58,8 @@ def getStgObjFromClass(stg_id: int, stg_name: str = None) -> classmethod:
     return None
 
 class Api_Trade_Method():
+    api_session: None
+
     # https://bybit-exchange.github.io/docs/v5/intro
     def makeSession(self, stg_id: int):
         session = create_session()
@@ -64,30 +68,43 @@ class Api_Trade_Method():
             bybit_key = bybit.bybit_key
             bybit_secret = bybit.bybit_secret
         session_api = HTTP(
-            testnet=True,
+            testnet=False,
             api_key=bybit_key,
-            api_secret=bybit_secret
+            api_secret=bybit_secret,
+            recv_window="8000"
         )
         return session_api
 
     def getCurrentPrice(self, symbol: str):
-        session = HTTP(testnet=False)
-        return session.get_tickers(
+        #self.api_session = HTTP(testnet=False)
+        return self.api_session.get_tickers(
             category="spot",
             symbol=symbol,
         )
 
-    def BuyMarket(self, symbol: str, qty: int, stg_id: int):
-
-        session = self.makeSession(stg_id=stg_id)
-        session.place_order(
+    def BuyMarket(self, symbol: str, qty: int):
+        return self.api_session.place_order(
             category="spot",
             symbol=symbol,
             side="Buy",
             orderType="Market",
-            qty="10",
+            qty=qty,
             isLeverage=0,
             orderFilter="Order",
+        )
+
+    def TakeProfit(self, order_dict):
+        api_session.place_order(
+            triggerDirection=1, #направление tp order
+            category=order_dict['ctg'],
+            symbol=order_dict['symbol'],
+            side=order_dict['side'],
+            orderType=order_dict['orderType'],
+            price=order_dict['tp_price'],
+            qty=order_dict['qty'],
+            orderFilter="tpslOrder",
+            triggerPrice = order_dict['tp_price'],
+            triggerBy='MarkPrice'
         )
 
 
@@ -96,8 +113,11 @@ class Strategy_Step(Api_Trade_Method):
 
     def __init__(self, stg_id):
         self.stg_id = stg_id
+        self.api_session = self.makeSession(stg_id=stg_id)
+        self.user_id = self.getUserId(stg_id=stg_id)
         self.stg_name = 'ladder_stg'
         self.stg_dict = self.getStgDictFromBD()
+
 
     def Start(self):
         # получаем теущую цену +
@@ -127,6 +147,7 @@ class Strategy_Step(Api_Trade_Method):
             #simple_message_from_threading(answer=ddict['answer'])
 
     def tryBuySell(self, lastPrice, stepPrice):
+        order_dict = {}
         session = create_session()
         tradeQ = session.query(TradeHistory).filter_by(price=str(lastPrice)).all()
         if tradeQ:
@@ -138,20 +159,34 @@ class Strategy_Step(Api_Trade_Method):
                 self.BuyMarket(tradeQ.stg.symbol, stg_dict['amount'])
                 session.commit()
 
-                self.StopLimit(symbol, tx)
+                self.TakeProfit(symbol, tx)
                 config.message = f"[" +emoji.emojize(':green_check:')+ f"] Куплено {lastPrice}"
                 config.update_message = True
         else:
-            self.BuyMarket(self.symbol, self.stg_dict['amount'], stg_id=self.stg_id)
-            session.commit()
-
-            self.StopLimit(symbol, tx)
+            tx = self.BuyMarket(self.symbol, self.stg_dict['amount'])
+            tx['result']['price'] = lastPrice
+            tx_obj = self.createTX(tx=tx, session=session)
+            order_dict = {
+                'ctg': self.stg_dict['ctg'],
+                'side': 'Sell',
+                'symbol': self.symbol,
+                'orderType': 'Market',
+                'tp_price': tx_obj.price + self.stg_dict['step'],
+                'qty': self.stg_dict['qty']
+            }
+            self.TakeProfit(self.symbol, order_dict=order_dict)
             config.message = f"[" + emoji.emojize(':green_check:') + f"] Куплено {lastPrice}"
             config.update_message = True
         #- если купили ставим стоп на шаг выше
         #- если это вторая покупка по цене, отменяем первый стоп и и ставим новый умноженный на 2
         session.close()
 
+    def createTX(self, tx: dict, session):
+        print(f"tx {tx['result']['orderId']}")
+        createTx = TradeHistory(price=tx['result']['price'], tx_id=tx['result']['orderId'], tx_dict=tx['result'], stg_id=self.stg_id, user_id=self.user_id)
+        session.add(createTx)
+        session.commit()
+        return createTx
 
     '''telegram bot func'''
     # включить или выключить стратегию торговли
@@ -192,6 +227,8 @@ class Strategy_Step(Api_Trade_Method):
                + f"\n/stgedit ladder_stg id={stg_id} active True - Выбрать эту стратегию\n" \
                +f"/stgedit ladder_stg id={stg_id} step 0.5 - шаг в USDT\n" \
                + f"/stgedit ladder_stg id={stg_id} deals 2 - количество сделок на одну цену\n" \
+               + f"/stgedit ladder_stg id={stg_id} ctg spot - spot или linear\n" \
+               + f"/stgedit ladder_stg id={stg_id} x 2 - плечо\n" \
                  f"/stgedit ladder_stg id={stg_id} amount 100 - сколько USDT за одну сделку\n"
 
     def getCommandValue(self, key: str, value: str) -> str:
@@ -240,6 +277,20 @@ class Strategy_Step(Api_Trade_Method):
                             except ValueError:
                                 result = f'Вы указали не правильный шаг, пример: 2\n\n'
 
+                    if key == 'ctg':
+                        if value == 'spot' or value == 'linear':
+                            try:
+                                temp_dict = {}
+                                temp_dict = query.stg_dict
+                                temp_dict['ctg'] = value
+                                stmt = update(Strategy).where(Strategy.id == self.stg_id).values(stg_dict=temp_dict)
+                                session.execute(stmt)
+                                session.commit()
+                                result = f'Вы указали <b>{value}</b> торговлю\n\n'
+                            except ValueError:
+                                result = f'Вы указали не правильную категорию торговли, можно только spot или linear (бессрочная)\n\n'
+
+
                     if key == 'amount':
                         if value:
                             query.stg_name = 'ladder_stg'
@@ -255,7 +306,7 @@ class Strategy_Step(Api_Trade_Method):
                             except ValueError:
                                 result = f'Вы указали не правильную сумму сделки, пример: 100\n\n'
                     ddcit = query.stg_dict
-                    result += f"<b>Текущие настройки</b>\nШаг цены USDT: {ddcit['step']}\nСумма сделки USDT: {ddcit['amount']}" \
+                    result += f"<b>Текущие настройки</b>\nШаг цены USDT: {ddcit['step']}\nСумма сделки: {ddcit['amount']}" \
                                       f"\nКоличество сделок на одну цену: {ddcit['deals']}\n\n<b>Описание</b>\n{ddcit['desc']}\n"
                 else:
                     result = f'Сначала активируйте торговую стратегию соотвествующей командой\n'
@@ -264,7 +315,7 @@ class Strategy_Step(Api_Trade_Method):
     # возврщает описание для телеги бота
     def getDescriptionStg(self) -> str:
         try:
-            answer = f"<b>Текущие настройки</b>\nШаг цены USDT: {self.stg_dict['step']}\nСумма сделки USDT: {self.stg_dict['amount']}" \
+            answer = f"<b>Текущие настройки</b>\nШаг цены USDT: {self.stg_dict['step']}\nСумма сделки: {self.stg_dict['amount']}" \
                                       f"\nКоличество сделок на одну цену: {self.stg_dict['deals']}\n\n<b>Описание</b> {self.stg_dict['desc']}\n"
             return answer
         except KeyError:
@@ -295,6 +346,14 @@ class Strategy_Step(Api_Trade_Method):
             simple_message_from_threading(answer=answer)
             return True
         return False
+
+    def getUserId(self, stg_id: int) -> int:
+        try:
+            stg = self.api_session.query(Strategy).filter_by(id=stg_id).one()
+        except NoResultFound:
+            return None
+        return stg.user.id
+
 
 
 
