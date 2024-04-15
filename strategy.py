@@ -35,12 +35,11 @@ def create_session():
 def splitCommandStg(stgedit: str):
     try:
         stg, stg_id, key, value = stgedit.split(" ", maxsplit=3)
+        stg_id = stg_id.split("=", 1)[-1].strip()
     except ValueError:
         return "Ошибка: не указаны все параметры.\n"
-    if stg == 'ladder_stg':
-        stg_id = stg_id.split("=", 1)[-1].strip()
-        createStgObj = Strategy_Step(stg_id=stg_id)
-        return createStgObj.getCommandValue(key=key, value=value)
+    stgObj = getStgObjFromClass(stg_id=stg_id, stg_name=stg)
+    return stgObj.getCommandValue(key=key, value=value)
 
 # получаем класс и отдаем объект на основе этого класса
 def getStgObjFromClass(stg_id: int, stg_name: str = None) -> classmethod:
@@ -111,10 +110,10 @@ class Api_Trade_Method():
 class Strategy_Step(Api_Trade_Method):
     symbol: str
 
-    def __init__(self, stg_id):
+    def __init__(self, stg_id, user_id):
         self.stg_id = stg_id
         self.api_session = self.makeSession(stg_id=stg_id)
-        self.user_id = self.getUserId(stg_id=stg_id)
+        self.user_id = user_id
         self.stg_name = 'ladder_stg'
         self.stg_dict = self.getStgDictFromBD()
 
@@ -125,7 +124,6 @@ class Strategy_Step(Api_Trade_Method):
         # тут же ставиться стоп на цену шага выше
         # запоминается время покупки в базу и стоп по этой покупке
         # если происходит покупка снова по этой цене, а старый тейкпрофит еще в базе, удаляется старый тейкпрофит и ставится новый двойной
-        time.sleep(2)
         ddict = self.StopStartStg()
         if ddict['start'] == True:
             decimal_part = str(self.stg_dict['step'])
@@ -149,10 +147,14 @@ class Strategy_Step(Api_Trade_Method):
     def tryBuySell(self, lastPrice, stepPrice):
         order_dict = {}
         session = create_session()
-        tradeQ = session.query(TradeHistory).filter_by(price=str(lastPrice)).all()
-        if tradeQ:
-            lastTX = session.query(TradeHistory).order_by(TradeHistory.id.desc()).one()
-            if tradeQ and stg_dict['deals'] >= tradeQ.count() or lastTX.price == str(lastPrice):
+        tradeQ = session.query(TradeHistory).order_by(TradeHistory.id.desc()).filter_by(price=str(lastPrice))
+        if tradeQ.first():
+            print('tyt1')
+            lastTX = tradeQ.first()
+            print(f"lastTX {lastTX.id}")
+            config.message = f"lastTX {lastTX.id}"
+            config.update_message = True
+            if tradeQ and self.stg_dict['deals'] >= tradeQ.count() or lastTX.price == str(lastPrice):
                 config.message = f"[" +emoji.emojize(':red_cross:')+ f"]{lastPrice} по этой цене уже совершены покупки"
                 config.update_message = True
             else:
@@ -163,6 +165,7 @@ class Strategy_Step(Api_Trade_Method):
                 config.message = f"[" +emoji.emojize(':green_check:')+ f"] Куплено {lastPrice}"
                 config.update_message = True
         else:
+            print('tyt2')
             tx = self.BuyMarket(self.symbol, self.stg_dict['amount'])
             tx['result']['price'] = lastPrice
             tx_obj = self.createTX(tx=tx, session=session)
@@ -273,9 +276,9 @@ class Strategy_Step(Api_Trade_Method):
                                 stmt = update(Strategy).where(Strategy.id == self.stg_id).values(stg_dict=temp_dict)
                                 session.execute(stmt)
                                 session.commit()
-                                result = f'Вы указали шаг - <b>{value} USDT</b>\n\n'
+                                result = f'Вы указали количество сделок на одну цену - <b>{value}</b>\n\n'
                             except ValueError:
-                                result = f'Вы указали не правильный шаг, пример: 2\n\n'
+                                result = f'Вы указали не формат, пример: 2\n\n'
 
                     if key == 'ctg':
                         if value == 'spot' or value == 'linear':
@@ -290,6 +293,21 @@ class Strategy_Step(Api_Trade_Method):
                             except ValueError:
                                 result = f'Вы указали не правильную категорию торговли, можно только spot или linear (бессрочная)\n\n'
 
+                    if key == 'x':
+                        if value:
+                            try:
+                                x = int(value)
+                                temp_dict = {}
+                                temp_dict = query.stg_dict
+                                temp_dict['x'] = value
+                                stmt = update(Strategy).where(Strategy.id == self.stg_id).values(stg_dict=temp_dict)
+                                session.execute(stmt)
+                                session.commit()
+                                result = f'Вы указали плечо <b>{value}</b> для торговли\n\n'
+                            except ValueError:
+                                result = f'Вы указали не правильное плечо для торговли\n\n'
+
+
 
                     if key == 'amount':
                         if value:
@@ -302,12 +320,13 @@ class Strategy_Step(Api_Trade_Method):
                                 stmt = update(Strategy).where(Strategy.id == self.stg_id).values(stg_dict=temp_dict)
                                 session.execute(stmt)
                                 session.commit()
-                                result = f'Вы указали сумму одной сделки - <b>{value} USDT</b>\n\n'
+                                result = f'Вы указали сумму одной сделки - <b>{value}</b>\n\n'
                             except ValueError:
                                 result = f'Вы указали не правильную сумму сделки, пример: 100\n\n'
                     ddcit = query.stg_dict
-                    result += f"<b>Текущие настройки</b>\nШаг цены USDT: {ddcit['step']}\nСумма сделки: {ddcit['amount']}" \
-                                      f"\nКоличество сделок на одну цену: {ddcit['deals']}\n\n<b>Описание</b>\n{ddcit['desc']}\n"
+                    result += f"<b>Текущие настройки</b>\nШаг цены USDT: {ddcit['step']}\nОдна сделка: {ddcit['amount']}" \
+                                      f"\nКоличество сделок на одну цену: {ddcit['deals']}\nКатегория: {ddcit['ctg']}\nПлечо: {ddcit['x']}" \
+                              f"\n\n<b>Описание</b>\n{ddcit['desc']}\n"
                 else:
                     result = f'Сначала активируйте торговую стратегию соотвествующей командой\n'
         return result
@@ -316,7 +335,8 @@ class Strategy_Step(Api_Trade_Method):
     def getDescriptionStg(self) -> str:
         try:
             answer = f"<b>Текущие настройки</b>\nШаг цены USDT: {self.stg_dict['step']}\nСумма сделки: {self.stg_dict['amount']}" \
-                                      f"\nКоличество сделок на одну цену: {self.stg_dict['deals']}\n\n<b>Описание</b> {self.stg_dict['desc']}\n"
+                     f"\nКоличество сделок на одну цену: {self.stg_dict['deals']}\nКатегория: {self.stg_dict['ctg']}\nПлечо: {self.stg_dict['x']}" \
+                     f"\n\n<b>Описание</b> {self.stg_dict['desc']}\n"
             return answer
         except KeyError:
             return f"<b>Необходимо пересоздать стратегию, активировав ее заново</b>\n"
@@ -346,13 +366,6 @@ class Strategy_Step(Api_Trade_Method):
             simple_message_from_threading(answer=answer)
             return True
         return False
-
-    def getUserId(self, stg_id: int) -> int:
-        try:
-            stg = self.api_session.query(Strategy).filter_by(id=stg_id).one()
-        except NoResultFound:
-            return None
-        return stg.user.id
 
 
 

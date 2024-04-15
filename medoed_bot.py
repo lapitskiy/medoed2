@@ -1,5 +1,9 @@
 import asyncio
 import logging
+import time
+
+import threading
+
 from aiogram import Bot, Dispatcher
 
 from aiogram import F
@@ -24,29 +28,30 @@ from utils import dbAccCheck, CheckExistCoin, getStgData, create_session, AddCoi
 logging.basicConfig(level=logging.INFO)
 # Объект бота
 bot = Bot(token=secret_config.bot_token.get_secret_value(), parse_mode="HTML")
-
 # Диспетчер
 dp = Dispatcher()
 
-# trade flow
-#trade = StartTrade()
+# Функция для бесконечного цикла в асинхронном потоке
+async def async_infinite_loop():
+    while True:
+        await asyncio.sleep(1)
+        try:
+            if config.update_message:
+                config.update_message = False
+                await bot.send_message(config.chat_id, str(config.message))
+        except:
+            continue
 
-async def send_message():
+
+#https://stackoverflow.com/questions/70907872/python-aiogram-bot-send-message-from-another-thread
+'''
+def send_message():
     # Используем функцию отправки сообщений
-    session = create_session()
     while True:
         if config.chat_id and query.teletaip and config.update_message:
             config.update_message = False
             await bot.send_message(config.chat_id, 'config.message')
-        #try:
-         #   pass
-            #query = session.query(User).filter_by(user=config.chat_id).one()
-            #if config.chat_id and query.teletaip and config.update_message:
-            #    config.update_message = False
-            #    await bot.send_message(config.chat_id, config.message)
-        #except NoResultFound:
-        #    pass
-
+'''
 
 ''' INLINE MAIN'''
 ''' INLINE MAIN'''
@@ -154,7 +159,6 @@ async def stgedit_command(message: Message, command: CommandObject):
             "Ошибка: неправильный формат команды\n"
         )
         return
-
     result = splitCommandStg(stgedit=command.args)
     print(f'result {result}')
     await message.answer(f"{result}")
@@ -231,19 +235,29 @@ async def add_bybit_api_command(
     await message.answer(f"{result['answer']}")
 
 
-
-
 # Запуск процесса поллинга новых апдейтов
 async def main():
     trade = StartTrade()
     trade.start()
-    await asyncio.create_task(dp.start_polling(bot))
-    await asyncio.create_task(send_message())
-
-    #await asyncio.gather(dp.start_polling(bot), send_message())
-
-
-
+    #send_message = Thread(target=queue_processing, args=())
+    #send_message.start()
+    #task1_handler = asyncio.create_task(dp.start_polling(bot))
+    #task2_handler = asyncio.create_task(send_message())
+    # Ожидание завершения всех задач
+    #await asyncio.gather(task1_handler, task2_handler)
+    #await asyncio.create_task(send_message())
+    #await asyncio.create_task(dp.start_polling(bot))
+    #print('tyt2')
+    #await asyncio.gather(task1_handler, task2_handler)
+    #send_thread = threading.Thread(target=send_message)
+    #send_thread.start()
+    loop = asyncio.get_running_loop()
+    loop.create_task(async_infinite_loop())
+    await dp.start_polling(bot, skip_updates=True)
+    #await dp.start_polling(bot)
+    #loop = asyncio.get_running_loop()
+    #tsk1 = loop.create_task(dp.start_polling(bot))
+    #tsk2 = loop.create_task(send_message())
 
 
 if __name__ == "__main__":
