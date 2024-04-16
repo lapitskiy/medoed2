@@ -4,6 +4,7 @@ from contextlib import closing
 from aiogram import types
 
 import emoji #https://carpedm20.github.io/emoji/
+from pybit.exceptions import InvalidRequestError
 from sqlalchemy import select, Null, update
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session, sessionmaker
@@ -20,8 +21,8 @@ stg_dict = {
             'stg_name': 'ladder_stg',
             'name': 'Лесенка',
             'desc': 'Стратегия торговли лесенкой',
-            'step': '0.0',
-            'amount': 0,
+            'step': '0.02',
+            'amount': 1,
             'deals': 1,
             'ctg': 'spot',
             'x': 1,
@@ -43,16 +44,17 @@ def splitCommandStg(stgedit: str):
 
 # получаем класс и отдаем объект на основе этого класса
 def getStgObjFromClass(stg_id: int, stg_name: str = None) -> classmethod:
+    session = create_session()
+    query = session.query(Strategy).filter_by(id=stg_id).one()
     if stg_id:
-        session = create_session()
-        query = session.query(Strategy).filter_by(id=stg_id).one()
         if query.stg_name == 'ladder_stg':
             createStgObj = Strategy_Step(stg_id=stg_id, user_id=query.user.id)
             session.close()
             return createStgObj
     if stg_name:
         if stg_name == 'ladder_stg':
-            createStgObj = Strategy_Step(stg_id=stg_id)
+            createStgObj = Strategy_Step(stg_id=stg_id, user_id=query.user.id)
+            session.close()
             return createStgObj
     return None
 
@@ -93,22 +95,31 @@ class Api_Trade_Method():
         )
 
     def TakeProfit(self, order_dict):
-        api_session.place_order(
-            triggerDirection=1, #направление tp order
-            category=order_dict['ctg'],
-            symbol=order_dict['symbol'],
-            side=order_dict['side'],
-            orderType=order_dict['orderType'],
-            price=order_dict['tp_price'],
-            qty=order_dict['qty'],
-            orderFilter="tpslOrder",
-            triggerPrice = order_dict['tp_price'],
-            triggerBy='MarkPrice'
-        )
+        print('tyt0002')
+        tp = {}
+        print(order_dict['tp_price'])
+        try:
+            tp = self.api_session.place_order(
+                triggerDirection=1,  # направление tp order
+                category=order_dict['ctg'],
+                symbol=order_dict['symbol'],
+                side=order_dict['side'],
+                orderType=order_dict['orderType'],
+                price=order_dict['tp_price'],
+                qty=order_dict['qty'],
+                orderFilter="tpslOrder",
+                triggerPrice=order_dict['tp_price'],
+                triggerBy='MarkPrice'
+            )
 
+        except InvalidRequestError as e:
+            print(f"tp exc {e}")
+            return {'except': 'Insufficient balance'}
+        return tp
 
 class Strategy_Step(Api_Trade_Method):
     symbol: str
+    decimal_part: int
 
     def __init__(self, stg_id, user_id):
         self.stg_id = stg_id
@@ -128,18 +139,18 @@ class Strategy_Step(Api_Trade_Method):
         if ddict['start'] == True:
             decimal_part = str(self.stg_dict['step'])
             decimal_part = decimal_part.split('.')[1]
+            self.decimal_part = len(decimal_part)
             ticker = self.getCurrentPrice(symbol=self.symbol)
             all_price = ticker['result']['list'][0]
-            print(f"lastprice {all_price['lastPrice']}")
-            lastPrice = round(float(all_price['lastPrice']), len(decimal_part))
+            #print(f"lastprice {all_price['lastPrice']}")
+            lastPrice = round(float(all_price['lastPrice']), self.decimal_part)
             stepPrice = float(self.stg_dict['step'])
             # Вывод количества символов после точки
             dev = str(lastPrice / stepPrice).split('.')[1]
             #dev = round(float(lastPrice) % float(stepPrice),len(decimal_part))
-            print(f'dev {dev} lastprice {lastPrice} steprpice {stepPrice} | / {float(lastPrice / stepPrice)} |decimal part {decimal_part} len {len(decimal_part)}')
+            #print(f'dev {dev} lastprice {lastPrice} steprpice {stepPrice} | / {float(lastPrice / stepPrice)} |decimal part {decimal_part} len {len(decimal_part)}')
             if int(dev[0]) == 0:
                 self.tryBuySell(lastPrice, stepPrice)
-                print(f'! цена шага достигнута - {lastPrice} - step {stepPrice}')
         else:
             print(f"answer {ddict['answer']}")
             #simple_message_from_threading(answer=ddict['answer'])
@@ -149,24 +160,23 @@ class Strategy_Step(Api_Trade_Method):
         session = create_session()
         tradeQ = session.query(TradeHistory).order_by(TradeHistory.id.desc()).filter_by(price=str(lastPrice))
         if tradeQ.first():
-            print('tyt1')
             lastTX = tradeQ.first()
-            print(f"lastTX {lastTX.id}")
             config.message = f"lastTX {lastTX.id}"
             config.update_message = True
             if tradeQ and self.stg_dict['deals'] >= tradeQ.count() or lastTX.price == str(lastPrice):
-                config.message = f"[" +emoji.emojize(':red_cross:')+ f"]{lastPrice} по этой цене уже совершены покупки"
-                config.update_message = True
+                pass
             else:
-                self.BuyMarket(tradeQ.stg.symbol, stg_dict['amount'])
+                tx = self.BuyMarket(tradeQ.stg.symbol, stg_dict['amount'])
+                print(f'[{lastTX.id}] покупка по цене {lastPrice} {tx}')
                 session.commit()
-
                 self.TakeProfit(symbol, tx)
                 config.message = f"[" +emoji.emojize(':green_check:')+ f"] Куплено {lastPrice}"
                 config.update_message = True
         else:
-            print('tyt2')
             tx = self.BuyMarket(self.symbol, self.stg_dict['amount'])
+            config.message = f"[" + emoji.emojize(':green_check:') + f"] Куплено {lastPrice}"
+            config.update_message = True
+            print(f"tx else 1 {tx}")
             tx['result']['price'] = lastPrice
             tx_obj = self.createTX(tx=tx, session=session)
             order_dict = {
@@ -174,10 +184,12 @@ class Strategy_Step(Api_Trade_Method):
                 'side': 'Sell',
                 'symbol': self.symbol,
                 'orderType': 'Market',
-                'tp_price': tx_obj.price + self.stg_dict['step'],
-                'qty': self.stg_dict['qty']
+                'tp_price': round(float(tx_obj.price) + float(self.stg_dict['step']),self.decimal_part),
+                'qty': self.stg_dict['amount']
             }
-            self.TakeProfit(self.symbol, order_dict=order_dict)
+            tp = self.TakeProfit(order_dict=order_dict)
+            print('tyt0001')
+            print(f"tp else {tp}")
             config.message = f"[" + emoji.emojize(':green_check:') + f"] Куплено {lastPrice}"
             config.update_message = True
         #- если купили ставим стоп на шаг выше
@@ -185,7 +197,7 @@ class Strategy_Step(Api_Trade_Method):
         session.close()
 
     def createTX(self, tx: dict, session):
-        print(f"tx {tx['result']['orderId']}")
+        #print(f"tx {tx['result']['orderId']}")
         createTx = TradeHistory(price=tx['result']['price'], tx_id=tx['result']['orderId'], tx_dict=tx['result'], stg_id=self.stg_id, user_id=self.user_id)
         session.add(createTx)
         session.commit()

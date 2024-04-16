@@ -21,7 +21,7 @@ class Settings():
     message: str = None
 
     def __init__(self):
-        update_message = False
+        update_message = True
 
 # При импорте файла сразу создастся
 # и провалидируется объект конфига,
