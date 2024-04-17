@@ -51,7 +51,8 @@ class TradeHistory(Base):
     __tablename__ = 'history'
     id: Mapped[int] = mapped_column(Identity(always=True), primary_key=True)
     price: Mapped[str] = mapped_column(nullable=False)
-    tx_id: Mapped[int] = mapped_column(sa.BigInteger, unique=True)
+    tx_id: Mapped[str] = mapped_column(unique=True)
+    tp_id: Mapped[str] = mapped_column(unique=True)
     tx_dict: Mapped[dict[str, Any]] = mapped_column(type_=JSON, nullable=True)
     user: Mapped['User'] = relationship(back_populates="tx")
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
