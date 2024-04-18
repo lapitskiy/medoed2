@@ -147,6 +147,7 @@ class Strategy_Step(Api_Trade_Method):
         self.user_id = user_id
         self.stg_name = 'ladder_stg'
         self.stg_dict = self.getStgDictFromBD()
+        config.getTgId(user_id=user_id)
 
 
     def Start(self):

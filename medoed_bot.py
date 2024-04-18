@@ -13,7 +13,7 @@ from sqlalchemy.exc import NoResultFound
 
 from keyboards import MyCallback, TradeCallback, EditStgCallback, ChooseStgCallback, main_keybord, settings_keybord, \
     trade_keybord, stg_keybord, ReportCallback, report_keybord, stg_choose_keybord
-from models import User
+from models import User, Strategy
 
 from strategy import getStgObjFromClass, stg_dict, splitCommandStg
 from config import config, secret_config
@@ -37,6 +37,7 @@ async def async_infinite_loop():
         await asyncio.sleep(1)
         try:
             if config.update_message:
+                print(f'async_infinite_loop id {config.chat_id}')
                 config.update_message = False
                 await bot.send_message(config.chat_id, str(config.message))
         except:
@@ -91,7 +92,8 @@ async def callback_settings(query: CallbackQuery, callback_data: MyCallback):
 async def callback_report(query: CallbackQuery, callback_data: MyCallback):
     if callback_data.action == 'teletipe':
         session = create_session()
-        query = session.query(Strategy).filter_by(id=callback_data.stg_id).one()
+        print(f"callback_data.id {callback_data.id}")
+        query = session.query(Strategy).filter(Strategy.user_id == callback_data.id).one()
         answer = 'Телетайп ВКЛ' if query.user.teletaip else 'Телетайп ВЫКЛ'
         session.close()
     if callback_data.action == 'reportpdf':
