@@ -39,7 +39,7 @@ async def async_infinite_loop():
             if config.update_message:
                 config.update_message = False
                 if config.message != config.last_message:
-                    config.lastMessage = config.message
+                    config.last_message = config.message
                     await bot.send_message(config.chat_id, str(config.message))
         except:
             print('msg exc')

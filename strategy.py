@@ -156,6 +156,7 @@ class Strategy_Step(Api_Trade_Method):
         self.user_id = user_id
         self.stg_name = 'ladder_stg'
         self.stg_dict = self.getStgDictFromBD()
+        self.session = create_session()
         config.getTgId(user_id=user_id)
 
 
@@ -167,6 +168,7 @@ class Strategy_Step(Api_Trade_Method):
         # если происходит покупка снова по этой цене, а старый тейкпрофит еще в базе, удаляется старый тейкпрофит и ставится новый двойной
         ddict = self.StopStartStg()
         if ddict['start'] == True:
+            self.cleanHistory()
             decimal_part = str(self.stg_dict['step'])
             decimal_part = decimal_part.split('.')[1]
             self.decimal_part = len(decimal_part)
@@ -189,8 +191,6 @@ class Strategy_Step(Api_Trade_Method):
         #self.uuid = str(uuid.uuid4())
         self.stg_dict = self.getStgDictFromBD()
         tp = round(lastPrice + float(self.stg_dict['step']), self.decimal_part)
-        self.session = create_session()
-        self.cleanHistory()
         tradeQ = self.session.query(TradeHistory).order_by(TradeHistory.id.desc()).filter_by(price=str(lastPrice))
         if tradeQ.first():
             lastTX = tradeQ.first()
