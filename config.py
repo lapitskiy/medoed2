@@ -33,6 +33,7 @@ class SecretSettings(BaseSettings):
 class Settings():
     chat_id: int = None
     message: str = None
+    last_message: str = None
 
     def __init__(self):
         self.update_message = False

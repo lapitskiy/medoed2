@@ -37,10 +37,12 @@ async def async_infinite_loop():
         await asyncio.sleep(1)
         try:
             if config.update_message:
-                print(f'async_infinite_loop id {config.chat_id}')
                 config.update_message = False
-                await bot.send_message(config.chat_id, str(config.message))
+                if config.message != config.last_message:
+                    config.lastMessage = config.message
+                    await bot.send_message(config.chat_id, str(config.message))
         except:
+            print('msg exc')
             continue
 
 

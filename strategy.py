@@ -5,6 +5,7 @@ from contextlib import closing
 from aiogram import types
 
 import emoji #https://carpedm20.github.io/emoji/
+from pybit import exceptions
 from pybit.exceptions import InvalidRequestError
 from sqlalchemy import select, Null, update
 from sqlalchemy.exc import NoResultFound
@@ -84,15 +85,22 @@ class Api_Trade_Method():
             symbol=symbol,
         )
 
-    def BuyMarket(self, symbol: str, qty: int, tp: str, uuid: str = None):
-        return self.api_session.place_order(
-            category="linear",
-            symbol=symbol,
-            side="Buy",
-            orderType="Market",
-            qty=qty,
-            orderLinkId=uuid
-        )
+    def BuyMarket(self, symbol: str, qty: int, tp: str = None, uuid: str = None):
+        try:
+            return self.api_session.place_order(
+                category="linear",
+                symbol=symbol,
+                side="Buy",
+                orderType="Market",
+                qty=qty,
+                orderLinkId=uuid
+            )
+        except Exception as api_err:
+            if api_err.__class__.__name__ == 'InvalidRequestError':
+                if '110007' in api_err.args[0]:
+                    config.message = emoji.emojize(":ZZZ:") + " Нет денег на счету для следующей покупки"
+                    config.update_message = True
+            return {'error': '110007'}
 
     def TakeProfit(self, order_dict):
         #print(f"order_dict {order_dict}\n")
@@ -104,13 +112,14 @@ class Api_Trade_Method():
                 tpTriggerBy="MarkPrice",
                 tpslMode="Partial",
                 tpOrderType="Limit",
-                tpSize="2",
+                tpSize=str(order_dict['qty']),
                 tpLimitPrice=str(order_dict['tp_price']),
                 positionIdx=0,
                 orderLinkId=order_dict['uuid'],
                 )
-        except InvalidRequestError as e:
-            print(f"tp exc {e}\n")
+        except Exception as api_err:
+            if api_err.__class__.__name__ == 'InvalidRequestError':
+                print(f"\ntakeprofit EXCEPTION: {api_err.args}\n")
 
 
     '''
@@ -178,7 +187,7 @@ class Strategy_Step(Api_Trade_Method):
 
     def tryBuySell(self, lastPrice):
         #self.uuid = str(uuid.uuid4())
-        time.sleep(5)
+        self.stg_dict = self.getStgDictFromBD()
         tp = round(lastPrice + float(self.stg_dict['step']), self.decimal_part)
         self.session = create_session()
         self.cleanHistory()
@@ -188,35 +197,45 @@ class Strategy_Step(Api_Trade_Method):
             if tradeQ and self.stg_dict['deals'] >= tradeQ.count() or lastTX.price == str(lastPrice):
                 pass
             else:
-                print(f"tx if 2 deals = {tx}")
-                tx = self.BuyMarket(tradeQ.stg.symbol, stg_dict['amount'], tp=tp)
+                tx = self.BuyMarket(tradeQ.stg.symbol, stg_dict['amount'])
                 tx['result']['price'] = lastPrice
-                tx_obj = self.createTX(tx=tx, session=session)
-                print(f'[{lastTX.id}] покупка по цене {lastPrice} {tx}')
-                session.commit()
-                #self.TakeProfit(symbol, tx)
-                config.message = f"[" + emoji.emojize(":check_mark_button:")+ f"] Куплено {lastPrice}"
-                config.update_message = True
+                if 'error' not in tx:
+                    order_dict = {
+                        'ctg': self.stg_dict['ctg'],
+                        'side': 'Sell',
+                        'symbol': self.symbol,
+                        'orderType': 'Market',
+                        'tp_price': round(float(lastPrice) + float(self.stg_dict['step']), self.decimal_part),
+                        'qty': self.stg_dict['amount'],
+                        'uuid': tx['result']['orderId']
+                    }
+                    self.TakeProfit(order_dict=order_dict)
+                    tp = self.LastTakeProfitOrder(symbol=self.symbol, limit=1)
+                    tx['result']['price'] = lastPrice
+                    tx['result']['tpOrderId'] = tp['result']['list'][0]['orderId']
+                    self.createTX(tx=tx)
+                    config.message = f"[" + emoji.emojize(":check_mark_button:") + f"] Куплено повторно по {lastPrice}"
+                    config.update_message = True
         else:
-            tx = self.BuyMarket(self.symbol, self.stg_dict['amount'], tp=tp)
-            print(f"tx else {tx}")
-            order_dict = {
-                'ctg': self.stg_dict['ctg'],
-                'side': 'Sell',
-                'symbol': self.symbol,
-                'orderType': 'Market',
-                'tp_price': round(float(lastPrice) + float(self.stg_dict['step']),self.decimal_part),
-                'qty': self.stg_dict['amount'],
-                'uuid': tx['result']['orderId']
-            }
-            self.TakeProfit(order_dict=order_dict)
-            tp = self.LastTakeProfitOrder(symbol=self.symbol, limit=1)
-            tx['result']['price'] = lastPrice
-            tx['result']['tpOrderId'] = tp['result']['list'][0]['orderId']
-            tx_obj = self.createTX(tx=tx)
-            print(f"tp else {tp}")
-            config.message = f"[" + emoji.emojize(":check_mark_button:")+ f"] Куплено {lastPrice}"
-            config.update_message = True
+            tx = self.BuyMarket(self.symbol, self.stg_dict['amount'])
+            if 'error' not in tx:
+                order_dict = {
+                    'ctg': self.stg_dict['ctg'],
+                    'side': 'Sell',
+                    'symbol': self.symbol,
+                    'orderType': 'Market',
+                    'tp_price': round(float(lastPrice) + float(self.stg_dict['step']),self.decimal_part),
+                    'qty': self.stg_dict['amount'],
+                    'uuid': tx['result']['orderId']
+                }
+                self.TakeProfit(order_dict=order_dict)
+                tp = self.LastTakeProfitOrder(symbol=self.symbol, limit=1)
+                tx['result']['price'] = lastPrice
+                tx['result']['tpOrderId'] = tp['result']['list'][0]['orderId']
+                tx_obj = self.createTX(tx=tx)
+                #print(f"tp else {tp}")
+                config.message = emoji.emojize(":check_mark_button:") + f" Куплено по цене {lastPrice}\n"
+                config.update_message = True
         #- если купили ставим стоп на шаг выше
         #- если это вторая покупка по цене, отменяем первый стоп и и ставим новый умноженный на 2
         self.session.close()
@@ -235,6 +254,8 @@ class Strategy_Step(Api_Trade_Method):
             if not any(tx.tp_id in d.values() for d in tp['result']['list']):
                 self.session.delete(tx)  # Удаляем пользователя
                 self.session.commit()
+                config.message = emoji.emojize(":money_with_wings:") + f" Сработал TakeProfit\n"
+                config.update_message = True
 
     '''telegram bot func'''
     # включить или выключить стратегию торговли
