@@ -2,13 +2,16 @@ from __future__ import annotations
 from typing import List, Optional
 import sqlalchemy as sa
 
-from sqlalchemy import Column, Integer, String, ForeignKey, Identity, JSON, MetaData, Any, BigInteger, Boolean
+from sqlalchemy import Column, Integer, String, ForeignKey, Identity, JSON, MetaData, Any, BigInteger, Boolean, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+
+import datetime
 
 #alembic revision --message="Initial" --autogenerate
 #>alembic upgrade head
@@ -50,10 +53,13 @@ class Strategy(Base):
 class TradeHistory(Base):
     __tablename__ = 'history'
     id: Mapped[int] = mapped_column(Identity(always=True), primary_key=True)
+    date_create: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    date_close: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     price: Mapped[str] = mapped_column(nullable=False)
     tx_id: Mapped[str] = mapped_column(unique=True)
     tp_id: Mapped[str] = mapped_column(unique=True)
     tx_dict: Mapped[dict[str, Any]] = mapped_column(type_=JSON, nullable=True)
+    filled: Mapped[bool] = mapped_column(server_default='false')
     user: Mapped['User'] = relationship(back_populates="tx")
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     stg: Mapped['Strategy'] = relationship(back_populates="tx")

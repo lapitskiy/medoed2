@@ -156,7 +156,6 @@ class Strategy_Step(Api_Trade_Method):
         self.user_id = user_id
         self.stg_name = 'ladder_stg'
         self.stg_dict = self.getStgDictFromBD()
-        self.session = create_session()
         config.getTgId(user_id=user_id)
 
 
@@ -191,6 +190,7 @@ class Strategy_Step(Api_Trade_Method):
         #self.uuid = str(uuid.uuid4())
         self.stg_dict = self.getStgDictFromBD()
         tp = round(lastPrice + float(self.stg_dict['step']), self.decimal_part)
+        self.session = create_session()
         tradeQ = self.session.query(TradeHistory).order_by(TradeHistory.id.desc()).filter_by(price=str(lastPrice))
         if tradeQ.first():
             lastTX = tradeQ.first()
@@ -231,8 +231,8 @@ class Strategy_Step(Api_Trade_Method):
                 self.TakeProfit(order_dict=order_dict)
                 tp = self.LastTakeProfitOrder(symbol=self.symbol, limit=1)
                 tx['result']['price'] = lastPrice
-                tx['result']['tpOrderId'] = tp['result']['list'][0]['orderId']
-                tx_obj = self.createTX(tx=tx)
+                tx['result']['tpOrderId'] = ['orderId']
+                tx_obj = self.createTX(tx=tx, tp=tp)
                 #print(f"tp else {tp}")
                 config.message = emoji.emojize(":check_mark_button:") + f" Куплено по цене {lastPrice}\n"
                 config.update_message = True
@@ -240,14 +240,22 @@ class Strategy_Step(Api_Trade_Method):
         #- если это вторая покупка по цене, отменяем первый стоп и и ставим новый умноженный на 2
         self.session.close()
 
-    def createTX(self, tx: dict):
+    def createTX(self, tx: dict, tp: dict):
         #print(f"tx {tx['result']['orderId']}")
-        createTx = TradeHistory(price=tx['result']['price'], tx_id=tx['result']['orderId'], tx_dict=tx['result'], stg_id=self.stg_id, user_id=self.user_id, tp_id=tx['result']['tpOrderId'])
+        tx_dict = {
+            'tp': tp['result']['list'][0]['price'],
+            'side': tp['result']['list'][0]['side'],
+            'qty': tp['result']['list'][0]['qty']
+        }
+        print(f'tp {tp}')
+        createTx = TradeHistory(price=tx['result']['price'], tx_id=tx['result']['orderId'], tx_dict=tx_dict, stg_id=self.stg_id, user_id=self.user_id,
+                                tp_id=tx['result']['tpOrderId'], filled=False)
         self.session.add(createTx)
         self.session.commit()
         return createTx
 
     def cleanHistory(self):
+        self.session = create_session()
         tp = self.LastTakeProfitOrder(symbol=self.symbol, limit=50)
         historyQ = self.session.query(TradeHistory).all()
         for tx in historyQ:
@@ -256,6 +264,7 @@ class Strategy_Step(Api_Trade_Method):
                 self.session.commit()
                 config.message = emoji.emojize(":money_with_wings:") + f" Сработал TakeProfit\n"
                 config.update_message = True
+        self.session.close()
 
     '''telegram bot func'''
     # включить или выключить стратегию торговли
