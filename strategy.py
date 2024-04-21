@@ -137,12 +137,16 @@ class Api_Trade_Method():
     '''
 
     def LastTakeProfitOrder(self, symbol: str, limit: int):
-        return self.api_session.get_open_orders(
-            category="linear",
-            symbol=symbol,
-            #openOnly=0,
-            limit=limit,
-            )
+        try:
+            return self.api_session.get_open_orders(
+                category="linear",
+                symbol=symbol,
+                #openOnly=0,
+                limit=limit,
+                )
+        except Exception as api_err:
+            print(f"\nLastTakeProfitOrder exception: {api_err.args}\n")
+        return {'error': api_err.args}
 
 class Strategy_Step(Api_Trade_Method):
     symbol: str
@@ -191,7 +195,7 @@ class Strategy_Step(Api_Trade_Method):
         self.stg_dict = self.getStgDictFromBD()
         tp = round(lastPrice + float(self.stg_dict['step']), self.decimal_part)
         self.session = create_session()
-        tradeQ = self.session.query(TradeHistory).order_by(TradeHistory.id.desc()).filter_by(price=str(lastPrice))
+        tradeQ = self.session.query(TradeHistory).order_by(TradeHistory.id.desc()).filter_by(price=str(lastPrice), filled=False)
         if tradeQ.first():
             lastTX = tradeQ.first()
             if tradeQ and self.stg_dict['deals'] >= tradeQ.count() or lastTX.price == str(lastPrice):
@@ -231,7 +235,7 @@ class Strategy_Step(Api_Trade_Method):
                 self.TakeProfit(order_dict=order_dict)
                 tp = self.LastTakeProfitOrder(symbol=self.symbol, limit=1)
                 tx['result']['price'] = lastPrice
-                tx['result']['tpOrderId'] = ['orderId']
+                tx['result']['tpOrderId'] = tp['result']['list'][0]['orderId']
                 tx_obj = self.createTX(tx=tx, tp=tp)
                 #print(f"tp else {tp}")
                 config.message = emoji.emojize(":check_mark_button:") + f" Куплено по цене {lastPrice}\n"
@@ -241,15 +245,15 @@ class Strategy_Step(Api_Trade_Method):
         self.session.close()
 
     def createTX(self, tx: dict, tp: dict):
-        #print(f"tx {tx['result']['orderId']}")
+        print(f"tx {tx['result']}")
         tx_dict = {
             'tp': tp['result']['list'][0]['price'],
             'side': tp['result']['list'][0]['side'],
             'qty': tp['result']['list'][0]['qty']
         }
-        print(f'tp {tp}')
         createTx = TradeHistory(price=tx['result']['price'], tx_id=tx['result']['orderId'], tx_dict=tx_dict, stg_id=self.stg_id, user_id=self.user_id,
-                                tp_id=tx['result']['tpOrderId'], filled=False)
+                                tp_id=tx['result']['tpOrderId']
+                                )
         self.session.add(createTx)
         self.session.commit()
         return createTx
@@ -257,10 +261,10 @@ class Strategy_Step(Api_Trade_Method):
     def cleanHistory(self):
         self.session = create_session()
         tp = self.LastTakeProfitOrder(symbol=self.symbol, limit=50)
-        historyQ = self.session.query(TradeHistory).all()
+        historyQ = self.session.query(TradeHistory).filter_by(filled=False)
         for tx in historyQ:
             if not any(tx.tp_id in d.values() for d in tp['result']['list']):
-                self.session.delete(tx)  # Удаляем пользователя
+                tx.filled = True
                 self.session.commit()
                 config.message = emoji.emojize(":money_with_wings:") + f" Сработал TakeProfit\n"
                 config.update_message = True

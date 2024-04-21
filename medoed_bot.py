@@ -95,7 +95,7 @@ async def callback_report(query: CallbackQuery, callback_data: MyCallback):
     if callback_data.action == 'teletipe':
         session = create_session()
         print(f"callback_data.id {callback_data.id}")
-        query = session.query(Strategy).filter(Strategy.user_id == callback_data.id).one()
+        query = session.query(Strategy).filter(Strategy.user.user == callback_data.id).one()
         answer = 'Телетайп ВКЛ' if query.user.teletaip else 'Телетайп ВЫКЛ'
         session.close()
     if callback_data.action == 'reportpdf':
