@@ -210,7 +210,7 @@ class Strategy_Step(Api_Trade_Method):
         self.session = create_session()
         tradeQ = self.session.query(TradeHistory).order_by(TradeHistory.id.desc())
         priceCountQ = self.session.query(TradeHistory).filter_by(price=str(lastPrice), filled=False)
-        if priceCountQ:
+        if priceCountQ.first():
             lastTX = tradeQ.first()
             if int(self.stg_dict['deals']) >= priceCountQ.count() and lastTX.price == str(lastPrice):
                 #print(f'IF {lastPrice} = {lastTX.price}')
