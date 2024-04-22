@@ -213,11 +213,11 @@ class Strategy_Step(Api_Trade_Method):
         if priceCountQ:
             lastTX = tradeQ.first()
             if int(self.stg_dict['deals']) >= priceCountQ.count() and lastTX.price == str(lastPrice):
-                print(f'IF {lastPrice} = {lastTX.price}')
-                print(f"deals {self.stg_dict['deals']} >= {priceCountQ.count()}")
+                #print(f'IF {lastPrice} = {lastTX.price}')
+                #print(f"deals {self.stg_dict['deals']} >= {priceCountQ.count()}")
                 pass
             else:
-                print(f'ELSE {lastPrice} | {lastTX.price}')
+                #print(f'ELSE {lastPrice} | {lastTX.price}')
                 tx = self.BuyMarket(self.symbol, self.stg_dict['amount'])
                 tx['result']['price'] = lastPrice
                 if 'error' not in tx:
