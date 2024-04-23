@@ -115,6 +115,7 @@ class Api_Trade_Method():
                     config.update_message = True
             return {'error': '110007'}
 
+
     def TakeProfit(self, order_dict):
         #print(f"order_dict {order_dict}\n")
         try:
@@ -134,20 +135,19 @@ class Api_Trade_Method():
             if api_err.__class__.__name__ == 'InvalidRequestError':
                 print(f"\ntakeprofit EXCEPTION: {api_err.args}\n")
 
+    def getFeeRate(self, symbol: str):
+        #print(f"order_dict {order_dict}\n")
+        try:
+            fee = self.api_session.get_fee_rates(
+                symbol=symbol,
+            )
+            return {
+                'takerFeeRate': fee['result']['list'][0]['takerFeeRate'],
+                'makerFeeRate': fee['result']['list'][0]['makerFeeRate']
+                }
+        except Exception as api_err:
+            print(f"\nGet fee EXCEPTION: {api_err.args}\n")
 
-    '''
-    def BuyMarket(self, symbol: str, qty: int, tp: str, uuid: str):
-        return self.api_session.place_order(
-            category="linear",
-            symbol=symbol,
-            side="Buy",
-            orderType="Market",
-            qty=qty,
-            takeProfit=tp,
-            tpslMode='Partial',
-            orderLinkId=uuid
-        )
-    '''
 
     def LastTakeProfitOrder(self, symbol: str, limit: int):
         try:
@@ -174,6 +174,7 @@ class Strategy_Step(Api_Trade_Method):
         self.stg_name = 'ladder_stg'
         self.stg_dict = self.getStgDictFromBD()
         config.getTgId(user_id=user_id)
+        self.fee = self.getFeeRate(symbol=self.symbol)
 
 
     def Start(self):
@@ -251,6 +252,7 @@ class Strategy_Step(Api_Trade_Method):
                 }
                 self.TakeProfit(order_dict=order_dict)
                 tp = self.LastTakeProfitOrder(symbol=self.symbol, limit=1)
+                print(f"tx buy {tx['result']}")
                 tx['result']['price'] = lastPrice
                 tx['result']['tpOrderId'] = tp['result']['list'][0]['orderId']
                 tx_obj = self.createTX(tx=tx, tp=tp)
@@ -263,7 +265,9 @@ class Strategy_Step(Api_Trade_Method):
 
     def createTX(self, tx: dict, tp: dict):
         print(f"tx {tx['result']}")
+        print(f"tp {tp['result']}")
         tx_dict = {
+            'price_clean': tp['result']['list'][0]['lastPriceOnCreated'],
             'tp': tp['result']['list'][0]['price'],
             'side': tp['result']['list'][0]['side'],
             'qty': tp['result']['list'][0]['qty']
@@ -282,8 +286,12 @@ class Strategy_Step(Api_Trade_Method):
         for tx in historyQ:
             if not any(tx.tp_id in d.values() for d in tp['result']['list']):
                 tx.filled = True
+                tx_dict = tx.tx_dict
+                fee = round(((float(tx_dict['price_clean']) * float(self.fee['takerFeeRate'])) + (float(tx_dict['tp']) * float(self.fee['makerFeeRate']))) * int(tx_dict['qty']), 3)
+                earn = round(((float(tx_dict['tp']) - float(tx_dict['price_clean'])) * int(tx_dict['qty'])) - fee, 3)
+                percent = round((earn / float(tx_dict['price_clean'])) * 100, 3)
                 self.session.commit()
-                config.message = emoji.emojize(":money_with_wings:") + f" Сработал TakeProfit {self.symbol} [{self.stg_dict['name']}]"
+                config.message = emoji.emojize(":money_with_wings:") + f" Сработал TakeProfit {self.symbol}, чистая прибыль {earn} usdt ({percent}%), комиссия {fee} [{self.stg_dict['name']}]"
                 config.update_message = True
         self.session.close()
 
