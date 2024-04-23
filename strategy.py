@@ -298,7 +298,7 @@ class Strategy_Step(Api_Trade_Method):
                 except:
                     pass
                 self.session.commit()
-                config.message = emoji.emojize(":money_with_wings:") + f" Сработал TakeProfit {self.symbol}, чистая прибыль {earn} usdt ({percent}%), комиссия {fee} [{self.stg_dict['name']}]"
+                config.message = emoji.emojize(":money_with_wings:") + f" Сработал TakeProfit {round(float(tx_dict['tp']),3)}, чистая прибыль {earn} usdt ({percent}%), комиссия {fee} [{self.stg_dict['name']}, {self.symbol}]"
                 config.update_message = True
         self.session.close()
 
