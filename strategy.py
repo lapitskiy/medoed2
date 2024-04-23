@@ -89,6 +89,7 @@ class Api_Trade_Method():
             api_secret=bybit_secret,
             recv_window="8000"
         )
+        session.close()
         return session_api
 
     def getCurrentPrice(self, symbol: str):
