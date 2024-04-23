@@ -287,9 +287,12 @@ class Strategy_Step(Api_Trade_Method):
             if not any(tx.tp_id in d.values() for d in tp['result']['list']):
                 tx.filled = True
                 tx_dict = tx.tx_dict
-                fee = round(((float(tx_dict['price_clean']) * float(self.fee['takerFeeRate'])) + (float(tx_dict['tp']) * float(self.fee['makerFeeRate']))) * int(tx_dict['qty']), 3)
-                earn = round(((float(tx_dict['tp']) - float(tx_dict['price_clean'])) * int(tx_dict['qty'])) - fee, 3)
-                percent = round((earn / float(tx_dict['price_clean'])) * 100, 3)
+                try:
+                    fee = round(((float(tx_dict['price_clean']) * float(self.fee['takerFeeRate'])) + (float(tx_dict['tp']) * float(self.fee['makerFeeRate']))) * int(tx_dict['qty']), 3)
+                    earn = round(((float(tx_dict['tp']) - float(tx_dict['price_clean'])) * int(tx_dict['qty'])) - fee, 3)
+                    percent = round((earn / float(tx_dict['price_clean'])) * 100, 3)
+                except:
+                    pass
                 self.session.commit()
                 config.message = emoji.emojize(":money_with_wings:") + f" Сработал TakeProfit {self.symbol}, чистая прибыль {earn} usdt ({percent}%), комиссия {fee} [{self.stg_dict['name']}]"
                 config.update_message = True
