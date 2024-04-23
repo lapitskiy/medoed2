@@ -287,6 +287,9 @@ class Strategy_Step(Api_Trade_Method):
             if not any(tx.tp_id in d.values() for d in tp['result']['list']):
                 tx.filled = True
                 tx_dict = tx.tx_dict
+                fee = None
+                earn = None
+                percent = None
                 try:
                     fee = round(((float(tx_dict['price_clean']) * float(self.fee['takerFeeRate'])) + (float(tx_dict['tp']) * float(self.fee['makerFeeRate']))) * int(tx_dict['qty']), 3)
                     earn = round(((float(tx_dict['tp']) - float(tx_dict['price_clean'])) * int(tx_dict['qty'])) - fee, 3)
