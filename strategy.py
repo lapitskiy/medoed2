@@ -112,11 +112,9 @@ class Api_Trade_Method():
                 orderLinkId=uuid
             )
         except Exception as api_err:
-            if api_err.__class__.__name__ == 'InvalidRequestError':
-                if '110007' in api_err.args[0]:
-                    config.message = emoji.emojize(":ZZZ:") + " Нет денег на счету для следующей покупки"
-                    config.update_message = True
-            return {'error': '110007'}
+            if '110007' in api_err.args[0]:
+                return {'error': emoji.emojize(":ZZZ:") + " Нет денег на счету для следующей покупки", 'code': api_err.args[0]}
+            return {'error': api_err, 'code': api_err.args[0]}
 
 
     def TakeProfit(self, order_dict):
@@ -223,8 +221,8 @@ class Strategy_Step(Api_Trade_Method):
             else:
                 #print(f'ELSE {lastPrice} | {lastTX.price}')
                 tx = self.BuyMarket(self.symbol, self.stg_dict['amount'])
-                tx['result']['price'] = lastPrice
                 if 'error' not in tx:
+                    tx['result']['price'] = lastPrice
                     tp_order_dict = {
                         'ctg': self.stg_dict['ctg'],
                         'side': 'Sell',
@@ -240,6 +238,9 @@ class Strategy_Step(Api_Trade_Method):
                     tx['result']['tpOrderId'] = tp['result']['list'][0]['orderId']
                     self.createTX(tx=tx, tp=tp)
                     config.message = emoji.emojize(":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} повторно по {lastPrice} [{self.stg_dict['name']}]"
+                    config.update_message = True
+                else:
+                    config.message = tx['error']
                     config.update_message = True
         else:
             tx = self.BuyMarket(self.symbol, self.stg_dict['amount'])
@@ -261,6 +262,9 @@ class Strategy_Step(Api_Trade_Method):
                 tx_obj = self.createTX(tx=tx, tp=tp)
                 #print(f"tp else {tp}")
                 config.message = emoji.emojize(":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} по {lastPrice} [{self.stg_dict['name']}]"
+                config.update_message = True
+            else:
+                config.message = tx['error']
                 config.update_message = True
         #- если купили ставим стоп на шаг выше
         #- если это вторая покупка по цене, отменяем первый стоп и и ставим новый умноженный на 2
@@ -297,11 +301,13 @@ class Strategy_Step(Api_Trade_Method):
                     fee = round(((float(tx_dict['price_clean']) * float(self.fee['takerFeeRate'])) + (float(tx_dict['tp']) * float(self.fee['makerFeeRate']))) * int(tx_dict['qty']), 3)
                     earn = round(((float(tx_dict['tp']) - float(tx_dict['price_clean'])) * int(tx_dict['qty'])) - fee, 3)
                     percent = round((earn / float(tx_dict['price_clean'])) * 100, 3)
+                    config.message = emoji.emojize(
+                        ":money_with_wings:") + f" Сработал TakeProfit {round(float(tx_dict['tp']), 3)}, чистая прибыль {earn} usdt ({percent}%), комиссия {fee} [{self.stg_dict['name']}, {self.symbol}]"
+                    config.update_message = True
                 except:
                     pass
                 self.session.commit()
-                config.message = emoji.emojize(":money_with_wings:") + f" Сработал TakeProfit {round(float(tx_dict['tp']),3)}, чистая прибыль {earn} usdt ({percent}%), комиссия {fee} [{self.stg_dict['name']}, {self.symbol}]"
-                config.update_message = True
+
         self.session.close()
 
     '''telegram bot func'''
