@@ -119,7 +119,7 @@ class Api_Trade_Method():
 
     def TakeProfit(self, order_dict):
         try:
-            self.api_session.set_trading_stop(
+           return self.api_session.set_trading_stop(
                 category="linear",
                 symbol="TONUSDT",
                 takeProfit=str(order_dict['tp_price']),
@@ -133,7 +133,7 @@ class Api_Trade_Method():
                 )
         except Exception as api_err:
             print(f"takeProfit={str(order_dict['tp_price'])}")
-            print(f"tpSize={str(order_dict['qty'])}")            
+            print(f"tpSize={str(order_dict['qty'])}")
             return {'error': api_err, 'code': api_err.args[0]}
 
     def getFeeRate(self, symbol: str):
@@ -233,7 +233,7 @@ class Strategy_Step(Api_Trade_Method):
                         'uuid': tx['result']['orderId']
                     }
                     tp = self.TakeProfit(order_dict=tp_order_dict)
-                    if 'error' not in tp:
+                    if tp is not None and isinstance(tp, dict) and 'error' not in tp:
                         last_tp = self.LastTakeProfitOrder(symbol=self.symbol, limit=1)
                         tx['result']['price'] = lastPrice
                         tx['result']['tpOrderId'] = last_tp['result']['list'][0]['orderId']
@@ -243,7 +243,7 @@ class Strategy_Step(Api_Trade_Method):
                     else:
                         config.message = emoji.emojize(
                             ":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} повторно по {lastPrice} [{self.stg_dict['name']}]" \
-                                                     f"\nTakeProfit не был установлен по причине: {tp['error']}"
+                                                     f"\nTakeProfit не был установлен по причине: {tp}"
                     config.update_message = True
                 else:
                     config.message = tx['error']
@@ -261,6 +261,7 @@ class Strategy_Step(Api_Trade_Method):
                     'uuid': tx['result']['orderId']
                 }
                 tp = self.TakeProfit(order_dict=order_dict)
+                print(f'tp {tp}')
                 if tp is not None and isinstance(tp, dict) and 'error' not in tp:
                     last_tp = self.LastTakeProfitOrder(symbol=self.symbol, limit=1)
                     #print(f"tx buy {tx['result']}")
@@ -272,7 +273,7 @@ class Strategy_Step(Api_Trade_Method):
                 else:
                     config.message = emoji.emojize(
                         ":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} по {lastPrice} [{self.stg_dict['name']}]" \
-                                                 f"\nTakeProfit не был установлен по причине: {tp['error']}"
+                                                 f"\nTakeProfit не был установлен по причине: {tp}"
                 config.update_message = True
             else:
                 config.message = tx['error']
