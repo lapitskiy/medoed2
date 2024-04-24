@@ -36,7 +36,6 @@ class StartTrade(threading.Thread):
         query = session.query(Strategy).all()
         for stg in query:
             if stg.start and stg.stg_name:
-                pass
                 stgObj = getStgObjFromClass(stg_id=stg.id)
                 stgObj.Start()
                 print('tut')
