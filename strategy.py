@@ -134,7 +134,7 @@ class Api_Trade_Method():
         except Exception as api_err:
             print(f"takeProfit={str(order_dict['tp_price'])}")
             print(f"tpSize={str(order_dict['qty'])}")
-            return {'error': api_err, 'code': api_err.args[0]}
+            return {'error': api_err}
 
     def getFeeRate(self, symbol: str):
         #print(f"order_dict {order_dict}\n")
