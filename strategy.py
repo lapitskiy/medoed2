@@ -118,7 +118,6 @@ class Api_Trade_Method():
 
 
     def TakeProfit(self, order_dict):
-        #print(f"order_dict {order_dict}\n")
         try:
             self.api_session.set_trading_stop(
                 category="linear",
@@ -133,6 +132,8 @@ class Api_Trade_Method():
                 orderLinkId=order_dict['uuid'],
                 )
         except Exception as api_err:
+            print(f"takeProfit={str(order_dict['tp_price'])}")
+            print(f"tpSize={str(order_dict['qty'])}")            
             return {'error': api_err, 'code': api_err.args[0]}
 
     def getFeeRate(self, symbol: str):
@@ -260,7 +261,7 @@ class Strategy_Step(Api_Trade_Method):
                     'uuid': tx['result']['orderId']
                 }
                 tp = self.TakeProfit(order_dict=order_dict)
-                if 'error' not in tp:
+                if tp is not None and isinstance(tp, dict) and 'error' not in tp:
                     last_tp = self.LastTakeProfitOrder(symbol=self.symbol, limit=1)
                     #print(f"tx buy {tx['result']}")
                     tx['result']['price'] = lastPrice
@@ -357,7 +358,7 @@ class Strategy_Step(Api_Trade_Method):
                + "\nВводите команды для настройки стратегии\n" \
                + f"\nдля этой стратегии укажите <b>id={stg_id}</b>\n" \
                + f"\n/stgedit ladder_stg id={stg_id} active True - Выбрать эту стратегию\n" \
-               +f"/stgedit ladder_stg id={stg_id} step 0.5 - шаг в USDT\n" \
+               +f"/stgedit ladder_stg id={stg_id} step 0.5 - шаг в USDT (min 20 pips)\n" \
                + f"/stgedit ladder_stg id={stg_id} deals 2 - количество сделок на одну цену\n" \
                + f"/stgedit ladder_stg id={stg_id} ctg spot - spot или linear\n" \
                + f"/stgedit ladder_stg id={stg_id} x 2 - плечо\n" \

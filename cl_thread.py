@@ -38,7 +38,6 @@ class StartTrade(threading.Thread):
             if stg.start and stg.stg_name:
                 stgObj = getStgObjFromClass(stg_id=stg.id)
                 stgObj.Start()
-                print('tut')
         session.close()
 
 
