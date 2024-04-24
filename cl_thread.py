@@ -11,11 +11,14 @@ from models import Strategy
 from strategy import getStgObjFromClass
 from utils_db import getEngine
 
+
+
 def create_session():
     Session = sessionmaker(getEngine())
     return Session()
 
 class StartTrade(threading.Thread):
+
     """StartTrade"""
     def __init__(self):
         threading.Thread.__init__(self)
@@ -36,7 +39,8 @@ class StartTrade(threading.Thread):
                 pass
                 stgObj = getStgObjFromClass(stg_id=stg.id)
                 stgObj.Start()
-                stgObj.session.close()
+                print('tut')
+        session.close()
 
 
 
