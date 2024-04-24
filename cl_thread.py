@@ -1,7 +1,7 @@
 import time
 import threading
 from contextlib import closing
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 from models import Strategy
 
 
@@ -11,6 +11,9 @@ from models import Strategy
 from strategy import getStgObjFromClass
 from utils_db import getEngine
 
+def create_session():
+    Session = sessionmaker(getEngine())
+    return Session()
 
 class StartTrade(threading.Thread):
     """StartTrade"""
@@ -26,13 +29,14 @@ class StartTrade(threading.Thread):
             self.checkTradeStg()
 
     def checkTradeStg(self):
-        with closing(Session(getEngine())) as session:
-            query = session.query(Strategy).all()
-            for stg in query:
-                if stg.start and stg.stg_name:
-                    pass
-                    stgObj = getStgObjFromClass(stg_id=stg.id)
-                    stgObj.Start()
+        session = create_session()
+        query = session.query(Strategy).all()
+        for stg in query:
+            if stg.start and stg.stg_name:
+                pass
+                stgObj = getStgObjFromClass(stg_id=stg.id)
+                stgObj.Start()
+                stgObj.session.close()
 
 
 

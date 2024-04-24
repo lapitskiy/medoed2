@@ -51,7 +51,7 @@ async def async_infinite_loop():
 
 @dp.message(Command("start"))
 async def start_command(message: Message, command: CommandObject):
-        result = dbAccCheck(message.from_user.id)
+        dbAccCheck(message.from_user.id)
         config.chat_id = message.from_user.id
         #await message.delete()
         await message.answer(f"Привет, <b>{message.from_user.username}</b>!",

@@ -75,14 +75,14 @@ def report_keybord(id):
 def stg_keybord(stg_id: int):
     builder = InlineKeyboardBuilder()
     ddict = {}
-    with Session(getEngine()) as session:
-        query = session.query(Strategy).filter_by(id=stg_id).one()
-        txt = 'Остановить' if query.start else 'Запустить'
-        builder.button(
-            text=txt,
-            callback_data=EditStgCallback(foo='stg_edit', id=stg_id, action='start')
-            # Value can be not packed to string inplace, because builder knows what to do with callback instance
-        )
+    session = create_session()
+    query = session.query(Strategy).filter_by(id=stg_id).one()
+    txt = 'Остановить' if query.start else 'Запустить'
+    builder.button(
+        text=txt,
+        callback_data=EditStgCallback(foo='stg_edit', id=stg_id, action='start')
+        # Value can be not packed to string inplace, because builder knows what to do with callback instance
+    )
     builder.button(
         text="Стратегия",
         callback_data=ChooseStgCallback(foo="stg_choose", id=stg_id, stg_name='')  # Value can be not packed to string inplace, because builder knows what to do with callback instance
@@ -92,6 +92,7 @@ def stg_keybord(stg_id: int):
         callback_data=MyCallback(foo="trade")  # Value can be not packed to string inplace, because builder knows what to do with callback instance
     )
     builder.adjust(2)
+    session.close()
     return builder.as_markup()
 
 def stg_choose_keybord(stg_id: int):
@@ -118,16 +119,16 @@ def trade_keybord(user_id: int):
     '''
     TRADE ORM BUTTON
     '''
-    with Session(getEngine()) as session:
-        query = session.query(User).options(selectinload(User.stg)).filter_by(user=user_id).one()
-        if query.stg:
-            for key in query.stg:
-                builder.button(
-                    text=key.symbol,
-                    callback_data=TradeCallback(foo='stg', id=key.id)
-                    # Value can be not packed to string inplace, because builder knows what to do with callback instance
-                )
-
+    session = create_session()
+    query = session.query(User).options(selectinload(User.stg)).filter_by(user=user_id).one()
+    if query.stg:
+        for key in query.stg:
+            builder.button(
+                text=key.symbol,
+                callback_data=TradeCallback(foo='stg', id=key.id)
+                # Value can be not packed to string inplace, because builder knows what to do with callback instance
+            )
+    session.close()
     '''
     SIMPLE BUTTON
     '''

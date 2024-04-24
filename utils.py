@@ -16,55 +16,45 @@ def create_session():
     return Session()
 
 def dbAccCheck(id):
-    with Session(getEngine()) as session:
-        statement = select(User).filter_by(user=id)
-        user_obj = session.scalars(statement).all()
-        if not user_obj:
-            session.add(User(user=id))
-            session.commit()
-            ddict = {'answer': 'Ваш аккаунт создан'}
-        else:
-            ddict = {'answer': 'Ваш аккаунт уже активирован'}
-    return ddict
-
-def dbCheck():
-    connection = dbConnect()
-    print(f"exc {type(connection)}")
-    if type(connection) == tuple:
-        return connection
-
-    connection.close()
-    return 'Соедение с базой успешное, целостность базы не нарушена'
+    session = create_session()
+    statement = select(User).filter_by(user=id)
+    user_obj = session.scalars(statement).all()
+    if not user_obj:
+        session.add(User(user=id))
+        session.commit()
+    session.close()
 
 def AddCoin(exchange, coin, id):
     ddict = {'answer': ''}
-    with Session(getEngine()) as session:
-        query = session.query(User).options(selectinload(User.api)).options(selectinload(User.stg)).filter_by(user=id).one()
-        if not query.api:
-            ddict['answer'] = ddict['answer'] + f'<b>Нет api, добавьте его в настройках</b>'
-        else:
-            for key in query.api:
-                ddict['answer'] = ddict['answer'] + f'ByBit api: {key.bybit_key}\n'
-                exchange_session = HTTP(
-                    testnet=False,
-                    api_key=key.bybit_key,
-                    api_secret=key.bybit_secret
-                )
-                try:
-                    get_coin = exchange_session.get_instruments_info(category='spot', symbol=coin, )
-                    print(f"instr {get_coin}")
-                    if not get_coin['result']['list']:
-                        ddict['answer'] = ddict['answer'] + f'<b>Монета не добавлена в базу</b>\nПары нет в споте ByBit, укажите правильно название (пример: BTCUSDT)\n'
-                    else:
-                        if get_coin['result']['list'][0]['symbol'] == coin:
-                            print(f"coin {coin} {query.id}")
-                            stg = Strategy(symbol=coin, limit=0, start=False, user_id=query.id)
-                            print(f"query.stg {query.stg}")
-                            session.add(stg)
-                            session.commit()
-                            ddict['answer'] = f'Пара есть в споте ByBit\n<b>{coin} добавлен в базу бота</b>\n\nДля запуска торговли отредактируйте стратегию этой пары'
-                except InvalidRequestError as e:
-                    return {'answer': e}
+    session = create_session()
+    query = session.query(User).options(selectinload(User.api)).options(selectinload(User.stg)).filter_by(user=id).one()
+    if not query.api:
+        ddict['answer'] = ddict['answer'] + f'<b>Нет api, добавьте его в настройках</b>'
+    else:
+        for key in query.api:
+            ddict['answer'] = ddict['answer'] + f'ByBit api: {key.bybit_key}\n'
+            exchange_session = HTTP(
+                testnet=False,
+                api_key=key.bybit_key,
+                api_secret=key.bybit_secret
+            )
+            try:
+                get_coin = exchange_session.get_instruments_info(category='spot', symbol=coin, )
+                print(f"instr {get_coin}")
+                if not get_coin['result']['list']:
+                    ddict['answer'] = ddict['answer'] + f'<b>Монета не добавлена в базу</b>\nПары нет в споте ByBit, укажите правильно название (пример: BTCUSDT)\n'
+                else:
+                    if get_coin['result']['list'][0]['symbol'] == coin:
+                        print(f"coin {coin} {query.id}")
+                        stg = Strategy(symbol=coin, limit=0, start=False, user_id=query.id)
+                        print(f"query.stg {query.stg}")
+                        session.add(stg)
+                        session.commit()
+                        ddict['answer'] = f'Пара есть в споте ByBit\n<b>{coin} добавлен в базу бота</b>\n\nДля запуска торговли отредактируйте стратегию этой пары'
+            except InvalidRequestError as e:
+                session.close()
+                return {'answer': e}
+    session.close()
     return ddict
 
 def AddApiByBit(api_key, api_secret, id):
