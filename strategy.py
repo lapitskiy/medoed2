@@ -259,13 +259,13 @@ class Strategy_Step(Api_Trade_Method):
                     'qty': self.stg_dict['amount'],
                     'uuid': tx['result']['orderId']
                 }
-                self.TakeProfit(order_dict=order_dict)
+                tp = self.TakeProfit(order_dict=order_dict)
                 if 'error' not in tp:
                     last_tp = self.LastTakeProfitOrder(symbol=self.symbol, limit=1)
                     #print(f"tx buy {tx['result']}")
                     tx['result']['price'] = lastPrice
-                    tx['result']['tpOrderId'] = tp['result']['list'][0]['orderId']
-                    tx_obj = self.createTX(tx=tx, tp=tp)
+                    tx['result']['tpOrderId'] = last_tp['result']['list'][0]['orderId']
+                    tx_obj = self.createTX(tx=tx, tp=last_tp)
                     #print(f"tp else {tp}")
                     config.message = emoji.emojize(":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} по {lastPrice} [{self.stg_dict['name']}]"
                 else:
