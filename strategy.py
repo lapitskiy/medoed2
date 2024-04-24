@@ -133,8 +133,7 @@ class Api_Trade_Method():
                 orderLinkId=order_dict['uuid'],
                 )
         except Exception as api_err:
-            if api_err.__class__.__name__ == 'InvalidRequestError':
-                print(f"\ntakeprofit EXCEPTION: {api_err.args}\n")
+            return {'error': api_err, 'code': api_err.args[0]}
 
     def getFeeRate(self, symbol: str):
         #print(f"order_dict {order_dict}\n")
@@ -232,12 +231,18 @@ class Strategy_Step(Api_Trade_Method):
                         'qty': self.stg_dict['amount'],
                         'uuid': tx['result']['orderId']
                     }
-                    self.TakeProfit(order_dict=tp_order_dict)
-                    tp = self.LastTakeProfitOrder(symbol=self.symbol, limit=1)
-                    tx['result']['price'] = lastPrice
-                    tx['result']['tpOrderId'] = tp['result']['list'][0]['orderId']
-                    self.createTX(tx=tx, tp=tp)
-                    config.message = emoji.emojize(":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} повторно по {lastPrice} [{self.stg_dict['name']}]"
+                    tp = self.TakeProfit(order_dict=tp_order_dict)
+                    if 'error' not in tp:
+                        last_tp = self.LastTakeProfitOrder(symbol=self.symbol, limit=1)
+                        tx['result']['price'] = lastPrice
+                        tx['result']['tpOrderId'] = last_tp['result']['list'][0]['orderId']
+                        self.createTX(tx=tx, tp=last_tp)
+                        config.message = emoji.emojize(":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} повторно по {lastPrice} [{self.stg_dict['name']}]"
+
+                    else:
+                        config.message = emoji.emojize(
+                            ":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} повторно по {lastPrice} [{self.stg_dict['name']}]" \
+                                                     f"\nTakeProfit не был установлен по причине: {tp['error']}"
                     config.update_message = True
                 else:
                     config.message = tx['error']
@@ -255,13 +260,18 @@ class Strategy_Step(Api_Trade_Method):
                     'uuid': tx['result']['orderId']
                 }
                 self.TakeProfit(order_dict=order_dict)
-                tp = self.LastTakeProfitOrder(symbol=self.symbol, limit=1)
-                print(f"tx buy {tx['result']}")
-                tx['result']['price'] = lastPrice
-                tx['result']['tpOrderId'] = tp['result']['list'][0]['orderId']
-                tx_obj = self.createTX(tx=tx, tp=tp)
-                #print(f"tp else {tp}")
-                config.message = emoji.emojize(":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} по {lastPrice} [{self.stg_dict['name']}]"
+                if 'error' not in tp:
+                    last_tp = self.LastTakeProfitOrder(symbol=self.symbol, limit=1)
+                    #print(f"tx buy {tx['result']}")
+                    tx['result']['price'] = lastPrice
+                    tx['result']['tpOrderId'] = tp['result']['list'][0]['orderId']
+                    tx_obj = self.createTX(tx=tx, tp=tp)
+                    #print(f"tp else {tp}")
+                    config.message = emoji.emojize(":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} по {lastPrice} [{self.stg_dict['name']}]"
+                else:
+                    config.message = emoji.emojize(
+                        ":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} по {lastPrice} [{self.stg_dict['name']}]" \
+                                                 f"\nTakeProfit не был установлен по причине: {tp['error']}"
                 config.update_message = True
             else:
                 config.message = tx['error']
@@ -271,8 +281,8 @@ class Strategy_Step(Api_Trade_Method):
         self.session.close()
 
     def createTX(self, tx: dict, tp: dict):
-        print(f"tx {tx['result']}")
-        print(f"tp {tp['result']}")
+        #print(f"tx {tx['result']}")
+        #print(f"tp {tp['result']}")
         tx_dict = {
             'price_clean': tp['result']['list'][0]['lastPriceOnCreated'],
             'tp': tp['result']['list'][0]['price'],
