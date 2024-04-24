@@ -23,7 +23,7 @@ from cl_thread import StartTrade
 # print(f"query {query.user}")
 
 # Включаем логирование, чтобы не пропустить важные сообщения
-from utils import dbAccCheck, CheckExistCoin, getStgData, create_session, AddCoin, CheckApiEx, AddApiByBit
+from utils import dbAccCheck, CheckExistCoin, getStgData, create_session, AddCoin, CheckApiEx, AddApiByBit, DelApiByBit
 
 logging.basicConfig(level=logging.INFO)
 # Объект бота
@@ -44,17 +44,6 @@ async def async_infinite_loop():
         except:
             print('msg exc')
             continue
-
-
-#https://stackoverflow.com/questions/70907872/python-aiogram-bot-send-message-from-another-thread
-'''
-def send_message():
-    # Используем функцию отправки сообщений
-    while True:
-        if config.chat_id and query.teletaip and config.update_message:
-            config.update_message = False
-            await bot.send_message(config.chat_id, 'config.message')
-'''
 
 ''' INLINE MAIN'''
 ''' INLINE MAIN'''
@@ -203,7 +192,8 @@ async def add_coin_command(message: Message, command: CommandObject):
 async def callback_api_bybit(query: CallbackQuery, callback_data: MyCallback):
     #await query.message.delete()
     result = CheckApiEx(query.from_user.id)
-    await query.message.edit_text(f"{result['answer']}\nВведите ключ api ByBit в формате \n/api_bybit api_key api_secret", reply_markup=settings_keybord())
+    await query.message.edit_text(f"{result['answer']}\nВведите ключ api ByBit в формате \n/api_bybit api_key api_secret"
+                                  f"\n\nУдалить api bybit\n/api_bybit del api_key", reply_markup=settings_keybord())
 
 ''' COMMAND '''
 ''' COMMAND '''
@@ -224,7 +214,7 @@ async def add_bybit_api_command(
         return
     try:
 
-        api_key, api_secret = command.args.split(" ", maxsplit=1)
+        value1, value2 = command.args.split(" ", maxsplit=1)
         # Если получилось меньше двух частей, вылетит ValueError
     except ValueError:
         await message.answer(
@@ -233,8 +223,10 @@ async def add_bybit_api_command(
         )
         return
     # Пробуем разделить аргументы на две части по первому встречному пробелу
-
-    result = AddApiByBit(api_key, api_secret, message.from_user.id)
+    if value1 == 'del':
+        result = DelApiByBit(value2, message.from_user.id)
+    else:
+        result = AddApiByBit(value1, value2, message.from_user.id)
     await message.delete()
     await message.answer(f"{result['answer']}")
 
@@ -243,25 +235,9 @@ async def add_bybit_api_command(
 async def main():
     trade = StartTrade()
     trade.start()
-    #send_message = Thread(target=queue_processing, args=())
-    #send_message.start()
-    #task1_handler = asyncio.create_task(dp.start_polling(bot))
-    #task2_handler = asyncio.create_task(send_message())
-    # Ожидание завершения всех задач
-    #await asyncio.gather(task1_handler, task2_handler)
-    #await asyncio.create_task(send_message())
-    #await asyncio.create_task(dp.start_polling(bot))
-    #print('tyt2')
-    #await asyncio.gather(task1_handler, task2_handler)
-    #send_thread = threading.Thread(target=send_message)
-    #send_thread.start()
     loop = asyncio.get_running_loop()
     loop.create_task(async_infinite_loop())
     await dp.start_polling(bot, skip_updates=True)
-    #await dp.start_polling(bot)
-    #loop = asyncio.get_running_loop()
-    #tsk1 = loop.create_task(dp.start_polling(bot))
-    #tsk2 = loop.create_task(send_message())
 
 
 if __name__ == "__main__":

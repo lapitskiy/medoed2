@@ -33,6 +33,7 @@ class User(Base):
 class Api(Base):
     __tablename__ = 'api'
     id: Mapped[int] = mapped_column(Identity(always=True), primary_key=True)
+    bybit_secret: Mapped[str] = mapped_column(nullable=False)
     bybit_secret: Mapped[str] = mapped_column(nullable=False, unique=True)
     bybit_key: Mapped[str] = mapped_column(nullable=False, unique=True)
     user: Mapped['User'] = relationship(back_populates="api")

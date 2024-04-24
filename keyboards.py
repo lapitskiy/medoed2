@@ -145,7 +145,7 @@ def trade_keybord(user_id: int):
 def settings_keybord():
     builder = InlineKeyboardBuilder()
     builder.button(
-        text="Ввести api ByBit",
+        text="Настройки ByBit API",
         callback_data=MyCallback(foo="api_bybit")  # Value can be not packed to string inplace, because builder knows what to do with callback instance
     )
     builder.button(

@@ -78,17 +78,19 @@ class Api_Trade_Method():
 
         # https://bybit-exchange.github.io/docs/v5/intro
     def makeSession(self, stg_id: int):
+        session_api = None
         session = create_session()
         api = session.query(Strategy).filter_by(id=stg_id).one()
-        for bybit in api.user.api:
-            bybit_key = bybit.bybit_key
-            bybit_secret = bybit.bybit_secret
-        session_api = HTTP(
-            testnet=False,
-            api_key=bybit_key,
-            api_secret=bybit_secret,
-            recv_window="8000"
-        )
+        if api.user.api:
+            for bybit in api.user.api:
+                bybit_key = bybit.bybit_key
+                bybit_secret = bybit.bybit_secret
+            session_api = HTTP(
+                testnet=False,
+                api_key=bybit_key,
+                api_secret=bybit_secret,
+                recv_window="8000"
+            )
         session.close()
         return session_api
 
@@ -237,7 +239,7 @@ class Strategy_Step(Api_Trade_Method):
                     tx['result']['price'] = lastPrice
                     tx['result']['tpOrderId'] = tp['result']['list'][0]['orderId']
                     self.createTX(tx=tx, tp=tp)
-                    config.message = emoji.emojize(":check_mark_button:") + f" Куплен {self.symbol} повторно по {lastPrice} [{self.stg_dict['name']}]"
+                    config.message = emoji.emojize(":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} повторно по {lastPrice} [{self.stg_dict['name']}]"
                     config.update_message = True
         else:
             tx = self.BuyMarket(self.symbol, self.stg_dict['amount'])
@@ -258,7 +260,7 @@ class Strategy_Step(Api_Trade_Method):
                 tx['result']['tpOrderId'] = tp['result']['list'][0]['orderId']
                 tx_obj = self.createTX(tx=tx, tp=tp)
                 #print(f"tp else {tp}")
-                config.message = emoji.emojize(":check_mark_button:") + f" Куплен {self.symbol} по {lastPrice} [{self.stg_dict['name']}]"
+                config.message = emoji.emojize(":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} по {lastPrice} [{self.stg_dict['name']}]"
                 config.update_message = True
         #- если купили ставим стоп на шаг выше
         #- если это вторая покупка по цене, отменяем первый стоп и и ставим новый умноженный на 2

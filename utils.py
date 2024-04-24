@@ -95,8 +95,25 @@ def AddApiByBit(api_key, api_secret, id):
                     for key in query.api:
                         if key.bybit_key == api_key:
                             ddict = {'answer': f'Такой Api bybit уже установлен'}
-    except InvalidRequestError as e:
+    except Exception as e:
+
         return {'answer': e}
+    return ddict
+
+def DelApiByBit(api_key, id):
+    ddict = {}
+    session = create_session()
+
+    query = session.query(Api).filter_by(bybit_key=api_key).one()
+    if query:
+        session.delete(query)
+        query = session.query(Strategy).filter(Strategy.user.user == id)
+        for item in query:
+            item.start = False
+        session.commit()
+    else:
+        ddict['answer'] = 'Такого Api Bybit нет в базе'
+    session.close()
     return ddict
 
 def CheckApiEx(user_id, company=None):
