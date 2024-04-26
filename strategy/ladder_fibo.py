@@ -17,150 +17,12 @@ from utils_db import getEngine
 from models import Strategy, TradeHistory
 from config import config
 
-stg_dict = {
-    'ladder_stg':
-        {
-            'stg_name': 'ladder_stg',
-            'name': 'Лесенка',
-            'desc': 'Стратегия торговли лесенкой',
-            'step': '0.02',
-            'amount': 1,
-            'deals': 1,
-            'ctg': 'linear',
-            'fibonachi': False,
-            'x': 1,
-            'exch': ''
-        }}
 
 def create_session():
     Session = sessionmaker(getEngine())
     return Session()
 
-def splitCommandStg(stgedit: str):
-    try:
-        stg, stg_id, key, value = stgedit.split(" ", maxsplit=3)
-        stg_id = stg_id.split("=", 1)[-1].strip()
-    except ValueError:
-        return "Ошибка: не указаны все параметры.\n"
-    stgObj = getStgObjFromClass(stg_id=stg_id, stg_name=stg)
-    return stgObj.getCommandValue(key=key, value=value)
-
-# получаем класс и отдаем объект на основе этого класса
-def getStgObjFromClass(stg_id: int, stg_name: str = None) -> classmethod:
-    session = create_session()
-    query = session.query(Strategy).filter_by(id=stg_id).one()
-    if stg_id:
-        if query.stg_name == 'ladder_stg':
-            createStgObj = Strategy_Step(stg_id=stg_id, user_id=query.user.id)
-            session.close()
-            return createStgObj
-    if stg_name:
-        if stg_name == 'ladder_stg':
-            createStgObj = Strategy_Step(stg_id=stg_id, user_id=query.user.id)
-            session.close()
-            return createStgObj
-    return None
-
-class Api_Trade_Method():
-    api_session: None
-
-        # https://bybit-exchange.github.io/docs/v5/intro
-    def makeSession(self, stg_id: int):
-        session_api = None
-        session = create_session()
-        api = session.query(Strategy).filter_by(id=stg_id).one()
-        if api.user.api:
-            for bybit in api.user.api:
-                bybit_key = bybit.bybit_key
-                bybit_secret = bybit.bybit_secret
-            session_api = HTTP(
-                testnet=False,
-                api_key=bybit_key,
-                api_secret=bybit_secret,
-                recv_window="8000"
-            )
-        session.close()
-        return session_api
-
-    def getCurrentPrice(self, symbol: str):
-        #self.api_session = HTTP(testnet=False)
-        return self.api_session.get_tickers(
-            category="spot",
-            symbol=symbol,
-        )
-
-    def BuyMarket(self, symbol: str, qty: int, tp: str = None, uuid: str = None):
-        try:
-            return self.api_session.place_order(
-                category="linear",
-                symbol=symbol,
-                side="Buy",
-                orderType="Market",
-                qty=qty,
-                orderLinkId=uuid
-            )
-        except Exception as api_err:
-            if '110007' in api_err.args[0]:
-                return {'error': emoji.emojize(":ZZZ:") + " Нет денег на счету для следующей покупки", 'code': api_err.args[0]}
-            return {'error': api_err, 'code': api_err.args[0]}
-
-
-    def TakeProfit(self, order_dict):
-        try:
-           return self.api_session.set_trading_stop(
-                category="linear",
-                symbol="TONUSDT",
-                takeProfit=str(order_dict['tp_price']),
-                tpTriggerBy="MarkPrice",
-                tpslMode="Partial",
-                tpOrderType="Limit",
-                tpSize=str(order_dict['qty']),
-                tpLimitPrice=str(order_dict['tp_price']),
-                positionIdx=0,
-                orderLinkId=order_dict['uuid'],
-                )
-        except Exception as api_err:
-            print(f"takeProfit={str(order_dict['tp_price'])}")
-            print(f"tpSize={str(order_dict['qty'])}")
-            return {'error': api_err}
-
-    def OrderHistory(self, orderId = None):
-        try:
-           return self.api_session.get_order_history(
-               category="linear",
-               orderId=orderId,
-               limit=1,
-                )
-        except Exception as api_err:
-            return {'error': api_err}
-
-    def getFeeRate(self, symbol: str):
-        #print(f"order_dict {order_dict}\n")
-        try:
-            fee = self.api_session.get_fee_rates(
-                symbol=symbol,
-            )
-            return {
-                'takerFeeRate': fee['result']['list'][0]['takerFeeRate'],
-                'makerFeeRate': fee['result']['list'][0]['makerFeeRate']
-                }
-        except Exception as api_err:
-            print(f"\nGet fee EXCEPTION: {api_err.args}\n")
-
-
-    def LastTakeProfitOrder(self, symbol: str, limit: int):
-        try:
-            return self.api_session.get_open_orders(
-                category="linear",
-                symbol=symbol,
-                #openOnly=0,
-                limit=limit,
-                )
-        except Exception as api_err:
-            print(f"\nLastTakeProfitOrder exception: {api_err.args}\n")
-        return {'error': api_err.args}
-
-class Strategy_Step(Api_Trade_Method):
+class Strategy_Step_Fibo(Api_Trade_Method):
     symbol: str
     decimal_part: int
     uuid: str
@@ -170,7 +32,7 @@ class Strategy_Step(Api_Trade_Method):
         self.stg_id = stg_id
         self.api_session = self.makeSession(stg_id=stg_id)
         self.user_id = user_id
-        self.stg_name = 'ladder_stg'
+        self.stg_name = 'ladder_fibo_stg'
         self.stg_dict = self.getStgDictFromBD()
         config.getTgId(user_id=user_id)
         self.fee = self.getFeeRate(symbol=self.symbol)
@@ -220,30 +82,27 @@ class Strategy_Step(Api_Trade_Method):
                 #print(f'ELSE {lastPrice} | {lastTX.price}')
                 tx = self.BuyMarket(self.symbol, self.stg_dict['amount'])
                 if 'error' not in tx:
-                    order_info = self.OrderHistory(tx['result']['orderId'])
-                    print(f'order_info 1 {order_info}')
-                    buy_price = order_info['result']['list'][0]['cumExecValue']
-                    tx['result']['price'] = buy_price
+                    tx['result']['price'] = lastPrice
                     tp_order_dict = {
                         'ctg': self.stg_dict['ctg'],
                         'side': 'Sell',
                         'symbol': self.symbol,
                         'orderType': 'Market',
-                        'tp_price': float(buy_price) + float(self.stg_dict['step']),
+                        'tp_price': round(float(lastPrice) + float(self.stg_dict['step']), self.decimal_part),
                         'qty': self.stg_dict['amount'],
                         'uuid': tx['result']['orderId']
                     }
                     tp = self.TakeProfit(order_dict=tp_order_dict)
                     if tp is not None and isinstance(tp, dict) and 'error' not in tp:
                         last_tp = self.LastTakeProfitOrder(symbol=self.symbol, limit=1)
-                        tx['result']['price'] = round(float(buy_price), self.decimal_part)
+                        tx['result']['price'] = lastPrice
                         tx['result']['tpOrderId'] = last_tp['result']['list'][0]['orderId']
                         self.createTX(tx=tx, tp=last_tp)
-                        config.message = emoji.emojize(":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} повторно по {buy_price} [{self.stg_dict['name']}]"
+                        config.message = emoji.emojize(":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} повторно по {lastPrice} [{self.stg_dict['name']}]"
 
                     else:
                         config.message = emoji.emojize(
-                            ":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} повторно по {buy_price} [{self.stg_dict['name']}]" \
+                            ":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} повторно по {lastPrice} [{self.stg_dict['name']}]" \
                                                      f"\nTakeProfit не был установлен по причине: {tp}"
                     config.update_message = True
                 else:
@@ -252,16 +111,12 @@ class Strategy_Step(Api_Trade_Method):
         else:
             tx = self.BuyMarket(self.symbol, self.stg_dict['amount'])
             if 'error' not in tx:
-                order_info = self.OrderHistory(tx['result']['orderId'])
-                print(f'order_info 2 {order_info}')
-                buy_price = order_info['result']['list'][0]['cumExecValue']
-                tx['result']['price'] = buy_price
                 order_dict = {
                     'ctg': self.stg_dict['ctg'],
                     'side': 'Sell',
                     'symbol': self.symbol,
                     'orderType': 'Market',
-                    'tp_price': float(buy_price) + float(self.stg_dict['step']),
+                    'tp_price': round(float(lastPrice) + float(self.stg_dict['step']),self.decimal_part),
                     'qty': self.stg_dict['amount'],
                     'uuid': tx['result']['orderId']
                 }
@@ -270,14 +125,14 @@ class Strategy_Step(Api_Trade_Method):
                 if tp is not None and isinstance(tp, dict) and 'error' not in tp:
                     last_tp = self.LastTakeProfitOrder(symbol=self.symbol, limit=1)
                     #print(f"tx buy {tx['result']}")
-                    tx['result']['price'] = round(float(buy_price), self.decimal_part)
+                    tx['result']['price'] = lastPrice
                     tx['result']['tpOrderId'] = last_tp['result']['list'][0]['orderId']
                     tx_obj = self.createTX(tx=tx, tp=last_tp)
                     #print(f"tp else {tp}")
-                    config.message = emoji.emojize(":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} по {buy_price} [{self.stg_dict['name']}]"
+                    config.message = emoji.emojize(":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} по {lastPrice} [{self.stg_dict['name']}]"
                 else:
                     config.message = emoji.emojize(
-                        ":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} по {buy_price} [{self.stg_dict['name']}]" \
+                        ":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} по {lastPrice} [{self.stg_dict['name']}]" \
                                                  f"\nTakeProfit не был установлен по причине: {tp}"
                 config.update_message = True
             else:
@@ -368,7 +223,6 @@ class Strategy_Step(Api_Trade_Method):
                + f"/stgedit ladder_stg id={stg_id} deals 2 - количество сделок на одну цену\n" \
                + f"/stgedit ladder_stg id={stg_id} ctg spot - spot или linear\n" \
                + f"/stgedit ladder_stg id={stg_id} x 2 - плечо\n" \
-               + f"/stgedit ladder_stg id={stg_id} fibo True - включить/выключить Фибоначчи True/False\n" \
                  f"/stgedit ladder_stg id={stg_id} amount 100 - сколько USDT за одну сделку\n"
 
     def getCommandValue(self, key: str, value: str) -> str:
@@ -503,7 +357,6 @@ class Strategy_Step(Api_Trade_Method):
             simple_message_from_threading(answer=answer)
             return True
         return False
-
 
 
 
