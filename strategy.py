@@ -16,6 +16,7 @@ from pybit.unified_trading import HTTP #https://www.bybit.com/en/help-center/s/w
 from utils_db import getEngine
 from models import Strategy, TradeHistory
 from config import config
+# http://192.168.0.21/pgadmin4/login?next=%2Fpgadmin4%2Fbrowser%2Fpip install --upgrade pip setuptools wheel
 
 stg_dict = {
     'ladder_stg':
@@ -254,6 +255,7 @@ class Strategy_Step(Api_Trade_Method):
             if 'error' not in tx:
                 order_info = self.OrderHistory(tx['result']['orderId'])
                 print(f'order_info 2 {order_info}')
+                print(f"order_info 3 {order_info['result']}")
                 buy_price = order_info['result']['list'][0]['cumExecValue']
                 tx['result']['price'] = buy_price
                 order_dict = {
