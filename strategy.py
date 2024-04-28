@@ -25,7 +25,7 @@ stg_dict = {
             'name': 'Лесенка',
             'desc': 'Стратегия торговли лесенкой',
             'step': '0.02',
-            'amount': 1,
+            'amount': '1.0',
             'deals': 1,
             'ctg': 'linear',
             'fibonachi': False,
@@ -101,9 +101,11 @@ class Api_Trade_Method():
                 orderLinkId=uuid
             )
         except Exception as api_err:
-            if '110007' in api_err.args[0]:
+            err_split = api_err.args[0]
+            err_split = err_split.split(")", 1)[0]
+            if '110007' in err_split:
                 return {'error': emoji.emojize(":ZZZ:") + " Нет денег на счету для следующей покупки", 'code': api_err.args[0]}
-            return {'error': api_err, 'code': api_err.args[0]}
+            return {'error': err_split, 'code': api_err.args[0]}
 
 
     def TakeProfit(self, order_dict):
@@ -253,6 +255,7 @@ class Strategy_Step(Api_Trade_Method):
         else:
             tx = self.BuyMarket(self.symbol, self.stg_dict['amount'])
             if 'error' not in tx:
+                #print(f"orderid {tx['result']['orderId']}")
                 order_info = self.OrderHistory(tx['result']['orderId'])
                 print(f'order_info 2 {order_info}')
                 print(f"order_info 3 {order_info['result']}")
@@ -345,7 +348,7 @@ class Strategy_Step(Api_Trade_Method):
                     return_dict['answer'] = '<b>Нельзя запустить!</b>\n У вас не настроен шаг стратегии' + emoji.emojize(
                         ":backhand_index_pointing_left:") +'\n'
                     query.start = False
-                if not stg_dict['amount'] or int(stg_dict['amount']) <= 0:
+                if not stg_dict['amount'] or float(step.replace(",", ".")) <= 0.0:
                     return_dict['answer'] = '<b>Нельзя запустить!</b>\n У вас не настроена сумма сделки' + emoji.emojize(
                         ":backhand_index_pointing_left:") + '\n'
                     query.start = False
@@ -371,7 +374,7 @@ class Strategy_Step(Api_Trade_Method):
                + f"/stgedit ladder_stg id={stg_id} ctg spot - spot или linear\n" \
                + f"/stgedit ladder_stg id={stg_id} x 2 - плечо\n" \
                + f"/stgedit ladder_stg id={stg_id} fibo True - включить/выключить Фибоначчи True/False\n" \
-                 f"/stgedit ladder_stg id={stg_id} amount 100 - сколько USDT за одну сделку\n"
+                 f"/stgedit ladder_stg id={stg_id} amount 100 - сколько крипты за одну сделку\n"
 
     def getCommandValue(self, key: str, value: str) -> str:
         with closing(Session(getEngine())) as session:
@@ -452,7 +455,7 @@ class Strategy_Step(Api_Trade_Method):
                         if value:
                             query.stg_name = 'ladder_stg'
                             try:
-                                value = int(value)
+                                value = float(value)
                                 temp_dict = {}
                                 temp_dict = query.stg_dict
                                 temp_dict['amount'] = value

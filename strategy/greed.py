@@ -42,12 +42,15 @@ class Strategy_Greed(Api_Trade_Method):
     def Start(self):
         ddict = self.StopStartStg()
         if ddict['start'] == True:
-            pass
+            self.tryBuySell(lastPrice)
         else:
             print(f"answer {ddict['answer']}")
             #simple_message_from_threading(answer=ddict['answer'])
 
     def tryBuySell(self, lastPrice):
+        # покупаю 0.2 и продаю сразу 0.2
+        # если покупка выросла на 1% закрываю
+        # продаю 0.4
         pass
 
     def createTX(self, tx: dict, tp: dict):
