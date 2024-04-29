@@ -153,7 +153,6 @@ async def stgedit_command(message: Message, command: CommandObject):
         )
         return
     result = splitCommandStg(stgedit=command.args)
-    print(f'result {result}')
     await message.answer(f"{result}")
 
 

@@ -42,7 +42,7 @@ class Strategy_Greed(Api_Trade_Method):
     def Start(self):
         ddict = self.StopStartStg()
         if ddict['start'] == True:
-            self.tryBuySell(lastPrice)
+            self.tryBuy(lastPrice)
         else:
             print(f"answer {ddict['answer']}")
             #simple_message_from_threading(answer=ddict['answer'])
@@ -211,10 +211,8 @@ class Strategy_Greed(Api_Trade_Method):
                                 result = f'Вы указали сумму одной сделки - <b>{value}</b>\n\n'
                             except ValueError:
                                 result = f'Вы указали не правильную сумму сделки, пример: 100\n\n'
-                    ddcit = query.stg_dict
-                    result += f"<b>Текущие настройки</b>\nШаг цены USDT: {ddcit['step']}\nСУмма сделки в токене: {ddcit['amount']}" \
-                                      f"\nКоличество сделок на одну цену: {ddcit['deals']}\nКатегория: {ddcit['ctg']}\nПлечо: {ddcit['x']}" \
-                              f"\n\n<b>Описание</b>\n{ddcit['desc']}\n"
+                    self.stg_dict = self.getStgDictFromBD()
+                    result += self.getDescriptionStg()
                 else:
                     result = f'Сначала активируйте торговую стратегию соотвествующей командой\n'
         return result

@@ -1,3 +1,4 @@
+import asyncio
 import math
 import time
 import uuid
@@ -18,6 +19,9 @@ from models import Strategy, TradeHistory
 from config import config
 # http://192.168.0.21/pgadmin4/login?next=%2Fpgadmin4%2Fbrowser%2Fpip install --upgrade pip setuptools wheel
 
+# ladder_stg
+# - fibo торгует по фибоначчи, если указана только одна сторона, торгует в обратную сторону на указанный amount
+# - fibo если указаны две стороны, торгует fibo в каждую сторону начиная с 1
 stg_dict = {
     'ladder_stg':
         {
@@ -28,7 +32,8 @@ stg_dict = {
             'amount': '1.0',
             'deals': 1,
             'ctg': 'linear',
-            'fibonachi': False,
+            'fibo': False,
+            'move': 'two', # up, down, two
             'x': 1,
             'exch': ''
         }}
@@ -127,13 +132,21 @@ class Api_Trade_Method():
             print(f"tpSize={str(order_dict['qty'])}")
             return {'error': api_err}
 
-    def OrderHistory(self, orderId = None):
+    async def OrderHistory(self, orderId = None):
         try:
-           return self.api_session.get_order_history(
+            get_history = self.api_session.get_order_history(
                category="linear",
                orderId=orderId,
                limit=1,
                 )
+            if not get_history['result']['list']:
+                await asyncio.sleep(2)
+                get_history = self.api_session.get_order_history(
+                    category="linear",
+                    orderId=orderId,
+                    limit=1,
+                )
+            return get_history
         except Exception as api_err:
             return {'error': api_err}
 
@@ -179,7 +192,7 @@ class Strategy_Step(Api_Trade_Method):
         self.fee = self.getFeeRate(symbol=self.symbol)
 
 
-    def Start(self):
+    async def Start(self):
         # получаем теущую цену +
         # если цена равна круглой цене в шаге который у нас указан, происходит покупка
         # тут же ставиться стоп на цену шага выше
@@ -201,12 +214,12 @@ class Strategy_Step(Api_Trade_Method):
             #dev = round(float(lastPrice) % float(stepPrice),len(decimal_part))
             #print(f'dev {dev} lastprice {lastPrice} steprpice {stepPrice} | / {float(lastPrice / stepPrice)} |decimal part {decimal_part} len {len(decimal_part)}')
             if int(dev[0]) == 0:
-                self.tryBuySell(lastPrice)
+                await self.tryBuy(lastPrice)
         else:
             print(f"answer {ddict['answer']}")
             #simple_message_from_threading(answer=ddict['answer'])
 
-    def tryBuySell(self, lastPrice):
+    async def tryBuy(self, lastPrice):
         #self.uuid = str(uuid.uuid4())
         self.stg_dict = self.getStgDictFromBD()
         tp = round(lastPrice + float(self.stg_dict['step']), self.decimal_part)
@@ -221,44 +234,51 @@ class Strategy_Step(Api_Trade_Method):
                 pass
             else:
                 #print(f'ELSE {lastPrice} | {lastTX.price}')
-                tx = self.BuyMarket(self.symbol, self.stg_dict['amount'])
-                if 'error' not in tx:
-                    order_info = self.OrderHistory(tx['result']['orderId'])
-                    print(f'order_info 1 {order_info}')
-                    buy_price = order_info['result']['list'][0]['cumExecValue']
-                    tx['result']['price'] = buy_price
-                    tp_order_dict = {
-                        'ctg': self.stg_dict['ctg'],
-                        'side': 'Sell',
-                        'symbol': self.symbol,
-                        'orderType': 'Market',
-                        'tp_price': float(buy_price) + float(self.stg_dict['step']),
-                        'qty': self.stg_dict['amount'],
-                        'uuid': tx['result']['orderId']
-                    }
-                    tp = self.TakeProfit(order_dict=tp_order_dict)
-                    if tp is not None and isinstance(tp, dict) and 'error' not in tp:
-                        last_tp = self.LastTakeProfitOrder(symbol=self.symbol, limit=1)
-                        tx['result']['price'] = round(float(buy_price), self.decimal_part)
-                        tx['result']['tpOrderId'] = last_tp['result']['list'][0]['orderId']
-                        self.createTX(tx=tx, tp=last_tp)
-                        config.message = emoji.emojize(":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} повторно по {buy_price} [{self.stg_dict['name']}]"
-
+                if (self.stg_dict['move'] == 'down' and float(lastPrice) < float(lastTX.price)) or (self.stg_dict['move'] == 'up' and float(lastPrice) > float(lastTX.price)) or self.stg_dict['move'] == 'two':
+                    print(f"price COUNT 2 {priceCountQ.count()} | deals = {self.stg_dict['deals']}\n")
+                    if self.stg_dict['fibo']:
+                        #fibo_next_num
+                        fibo_amount = 1
+                        tx = self.BuyMarket(self.symbol, fibo_amount)
                     else:
-                        config.message = emoji.emojize(
-                            ":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} повторно по {buy_price} [{self.stg_dict['name']}]" \
-                                                     f"\nTakeProfit не был установлен по причине: {tp}"
-                    config.update_message = True
-                else:
-                    config.message = tx['error']
-                    config.update_message = True
+                        tx = self.BuyMarket(self.symbol, self.stg_dict['amount'])
+                    if 'error' not in tx:
+                        order_info = await self.OrderHistory(tx['result']['orderId'])
+                        print(f'order_info 1 {order_info}')
+                        buy_price = order_info['result']['list'][0]['cumExecValue']
+                        tx['result']['price'] = buy_price
+                        tp_order_dict = {
+                            'ctg': self.stg_dict['ctg'],
+                            'side': 'Sell',
+                            'symbol': self.symbol,
+                            'orderType': 'Market',
+                            'tp_price': float(buy_price) + float(self.stg_dict['step']),
+                            'qty': self.stg_dict['amount'],
+                            'uuid': tx['result']['orderId']
+                        }
+                        tp = self.TakeProfit(order_dict=tp_order_dict)
+                        if tp is not None and isinstance(tp, dict) and 'error' not in tp:
+                            last_tp = self.LastTakeProfitOrder(symbol=self.symbol, limit=1)
+                            tx['result']['price'] = round(float(buy_price), self.decimal_part)
+                            tx['result']['tpOrderId'] = last_tp['result']['list'][0]['orderId']
+                            self.createTX(tx=tx, tp=last_tp)
+                            config.message = emoji.emojize(":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} повторно по {buy_price} [{self.stg_dict['name']}]"
+
+                        else:
+                            config.message = emoji.emojize(
+                                ":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} повторно по {buy_price} [{self.stg_dict['name']}]" \
+                                                         f"\nTakeProfit не был установлен по причине: {tp}"
+                        config.update_message = True
+                    else:
+                        config.message = tx['error']
+                        config.update_message = True
         else:
             tx = self.BuyMarket(self.symbol, self.stg_dict['amount'])
+            print(f"else price COUNT - {priceCountQ.count()} | deals = {self.stg_dict['deals']}\n")
             if 'error' not in tx:
-                #print(f"orderid {tx['result']['orderId']}")
-                order_info = self.OrderHistory(tx['result']['orderId'])
-                print(f'order_info 2 {order_info}')
-                print(f"order_info 3 {order_info['result']}")
+                print(f"orderid {tx}\n")
+                order_info = await self.OrderHistory(tx['result']['orderId'])
+                print(f'order_info 2 {order_info}\n')
                 buy_price = order_info['result']['list'][0]['cumExecValue']
                 tx['result']['price'] = buy_price
                 order_dict = {
@@ -368,12 +388,13 @@ class Strategy_Step(Api_Trade_Method):
         return f"Настройка стратегии Лесенка" + emoji.emojize(":chart_increasing:") \
                + "\nВводите команды для настройки стратегии\n" \
                + f"\nдля этой стратегии укажите <b>id={stg_id}</b>\n" \
-               + f"\n/stgedit ladder_stg id={stg_id} active True - Выбрать эту стратегию\n" \
+               + f"\n/stgedit ladder_stg id={stg_id} active true - Выбрать эту стратегию\n" \
                +f"/stgedit ladder_stg id={stg_id} step 0.5 - шаг в USDT (min 20 pips)\n" \
                + f"/stgedit ladder_stg id={stg_id} deals 2 - количество сделок на одну цену\n" \
                + f"/stgedit ladder_stg id={stg_id} ctg spot - spot или linear\n" \
                + f"/stgedit ladder_stg id={stg_id} x 2 - плечо\n" \
-               + f"/stgedit ladder_stg id={stg_id} fibo True - включить/выключить Фибоначчи True/False\n" \
+               + f"/stgedit ladder_stg id={stg_id} fibo true - включить/выключить Фибоначчи true/false\n" \
+               + f"/stgedit ladder_stg id={stg_id} move up - Направление движения покупки up, down, two\n" \
                  f"/stgedit ladder_stg id={stg_id} amount 100 - сколько крипты за одну сделку\n"
 
     def getCommandValue(self, key: str, value: str) -> str:
@@ -383,7 +404,7 @@ class Strategy_Step(Api_Trade_Method):
             if not query:
                 result = f'Не создана стратегия торговли\n'
             else:
-                if key == 'active':
+                if key.lower() == 'active':
                     if value:
                         result = f'<b>Стратегия Лесенка ' + emoji.emojize(":chart_increasing:") + f' активирована для {query.symbol} ({self.stg_id})</b>\nДля ее работы надо указать все настройки и после этого запустить.\n\n'
                         query.stg_dict = stg_dict['ladder_stg']
@@ -423,17 +444,15 @@ class Strategy_Step(Api_Trade_Method):
                                 result = f'Вы указали не формат, пример: 2\n\n'
 
                     if key == 'ctg':
-                        if value == 'spot' or value == 'linear':
-                            try:
-                                temp_dict = {}
-                                temp_dict = query.stg_dict
-                                temp_dict['ctg'] = value
-                                stmt = update(Strategy).where(Strategy.id == self.stg_id).values(stg_dict=temp_dict)
-                                session.execute(stmt)
-                                session.commit()
-                                result = f'Вы указали <b>{value}</b> торговлю\n\n'
-                            except ValueError:
-                                result = f'Вы указали не правильную категорию торговли, можно только spot или linear (бессрочная)\n\n'
+                        if value.lower() == 'spot' or value.lower() == 'linear':
+                            temp_dict = query.stg_dict
+                            temp_dict['ctg'] = value
+                            stmt = update(Strategy).where(Strategy.id == self.stg_id).values(stg_dict=temp_dict)
+                            session.execute(stmt)
+                            session.commit()
+                            result = f'Вы указали <b>{value}</b> торговлю\n\n'
+                        else:
+                            result = f'Вы указали не правильную категорию торговли, можно только spot или linear (бессрочная)\n\n'
 
                     if key == 'x':
                         if value:
@@ -449,7 +468,27 @@ class Strategy_Step(Api_Trade_Method):
                             except ValueError:
                                 result = f'Вы указали не правильное плечо для торговли\n\n'
 
+                    if key == 'move':
+                        if value.lower() == 'up' or value.lower() == 'down' or value.lower() == 'two':
+                            temp_dict = query.stg_dict
+                            temp_dict['move'] = value
+                            stmt = update(Strategy).where(Strategy.id == self.stg_id).values(stg_dict=temp_dict)
+                            session.execute(stmt)
+                            session.commit()
+                            result = f'Вы указали движение торговли <b>{value}</b>\n\n'
+                        else:
+                             result = f'Вы указали не допустимое движение для торговли\n\n'
 
+                    if key == 'fibo':
+                        if value.lower() == 'false' or value.lower() == 'true':
+                            temp_dict = query.stg_dict
+                            temp_dict['fibo'] = bool(value)
+                            stmt = update(Strategy).where(Strategy.id == self.stg_id).values(stg_dict=temp_dict)
+                            session.execute(stmt)
+                            session.commit()
+                            result = f'Вы указали значение <b>{value}</b> для торговли по Фиббоначи\n\n'
+                        else:
+                             result = f'Вы указали не правильное значение для торговли Фиббоначи\n\n'
 
                     if key == 'amount':
                         if value:
@@ -465,10 +504,8 @@ class Strategy_Step(Api_Trade_Method):
                                 result = f'Вы указали сумму одной сделки - <b>{value}</b>\n\n'
                             except ValueError:
                                 result = f'Вы указали не правильную сумму сделки, пример: 100\n\n'
-                    ddcit = query.stg_dict
-                    result += f"<b>Текущие настройки</b>\nШаг цены USDT: {ddcit['step']}\nСУмма сделки в токене: {ddcit['amount']}" \
-                                      f"\nКоличество сделок на одну цену: {ddcit['deals']}\nКатегория: {ddcit['ctg']}\nПлечо: {ddcit['x']}" \
-                              f"\n\n<b>Описание</b>\n{ddcit['desc']}\n"
+                    self.stg_dict = self.getStgDictFromBD()
+                    result += self.getDescriptionStg()
                 else:
                     result = f'Сначала активируйте торговую стратегию соотвествующей командой\n'
         return result
@@ -478,6 +515,7 @@ class Strategy_Step(Api_Trade_Method):
         try:
             answer = f"<b>Текущие настройки</b>\nШаг цены USDT: {self.stg_dict['step']}\nСумма сделки: {self.stg_dict['amount']}" \
                      f"\nКоличество сделок на одну цену: {self.stg_dict['deals']}\nКатегория: {self.stg_dict['ctg']}\nПлечо: {self.stg_dict['x']}" \
+                     f"\nФибоначчи: {self.stg_dict['fibo']}\nПокупка по движению: {self.stg_dict['move']}" \
                      f"\n\n<b>Описание</b> {self.stg_dict['desc']}\n"
             return answer
         except KeyError:
@@ -509,6 +547,18 @@ class Strategy_Step(Api_Trade_Method):
             return True
         return False
 
+    def fibo_next_num(self, n: int) -> int:
+        # Возвращает список первых n чисел Фибоначчи
+        if n <= 0:
+            return 1
+        feb_prev = 1
+        feb_curr = 1
+        feb_next = 1
+        while feb_next <= n: # 13
+            feb_next = feb_prev + feb_curr
+            feb_prev = feb_curr
+            feb_curr = feb_next
+        return feb_next
 
 
 

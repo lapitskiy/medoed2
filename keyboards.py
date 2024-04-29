@@ -51,7 +51,6 @@ def main_keybord():
 def report_keybord(id):
     builder = InlineKeyboardBuilder()
     session = create_session()
-    print(id)
     query = session.query(User).filter_by(user=id).one()
     txt = 'Телетайп ВКЛ' if query.teletaip else 'Телетайп ВЫКЛ'
     session.close()
