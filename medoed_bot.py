@@ -47,7 +47,7 @@ async def async_infinite_loop():
                     #print(img_byte_arr)
                     #photo = InputFile("plot.png")
                     config.format_message = 'text'
-                    await bot.send_photo(config.chat_id, photo=types.FSInputFile(config.image_path))
+                    await bot.send_photo(config.chat_id, photo=config.image_path)
         except Exception as e:
             print(f'msg exc {e}')
             continue
