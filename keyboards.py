@@ -87,6 +87,10 @@ def stg_keybord(stg_id: int):
         callback_data=ChooseStgCallback(foo="stg_choose", id=stg_id, stg_name='')  # Value can be not packed to string inplace, because builder knows what to do with callback instance
     )
     builder.button(
+        text="Backtest",
+        callback_data=ChooseStgCallback(foo="stg_backtest", id=stg_id, stg_name='')  # Value can be not packed to string inplace, because builder knows what to do with callback instance
+    )
+    builder.button(
         text="Назад",
         callback_data=MyCallback(foo="trade")  # Value can be not packed to string inplace, because builder knows what to do with callback instance
     )

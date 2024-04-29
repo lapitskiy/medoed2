@@ -4,10 +4,10 @@ import time
 
 import threading
 
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, types
 
 from aiogram import F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InputFile, FSInputFile
 from aiogram.filters import Command, CommandObject, CommandStart
 from sqlalchemy.exc import NoResultFound
 
@@ -18,7 +18,6 @@ from models import User, Strategy
 from strategy import getStgObjFromClass, stg_dict, splitCommandStg
 from config import config, secret_config
 from cl_thread import StartTrade
-
 
 # print(f"query {query.user}")
 
@@ -34,15 +33,23 @@ dp = Dispatcher()
 # Функция для бесконечного цикла в асинхронном потоке
 async def async_infinite_loop():
     while True:
-        await asyncio.sleep(1)
+        await asyncio.sleep(0)
         try:
             if config.update_message:
                 config.update_message = False
-                if config.message != config.last_message:
+                if config.message != config.last_message and config.format_message == 'text':
                     config.last_message = config.message
                     await bot.send_message(config.chat_id, str(config.message))
-        except:
-            print('msg exc')
+                if config.format_message == 'image':
+                    #img_byte_arr = BytesIO()
+                    #config.image.save(img_byte_arr, format='PNG')  # Сохраняем изображение в BytesIO объект
+                    #img_byte_arr.seek(0)
+                    #print(img_byte_arr)
+                    #photo = InputFile("plot.png")
+                    config.format_message = 'text'
+                    await bot.send_photo(config.chat_id, photo=types.FSInputFile(config.image_path))
+        except Exception as e:
+            print(f'msg exc {e}')
             continue
 
 ''' INLINE MAIN'''
@@ -134,11 +141,19 @@ async def callback_edit_stg(query: CallbackQuery, callback_data: EditStgCallback
 async def callback_choose_stg(query: CallbackQuery, callback_data: ChooseStgCallback):
     answer = 'Выберите стратегию для получения помощи по настройке\n'
     if callback_data.stg_name in stg_dict:
-        print(f'id call {callback_data.id}')
+        #print(f'id call {callback_data.id}')
         stgObj = getStgObjFromClass(stg_id=callback_data.id, stg_name=callback_data.stg_name)
         answer = stgObj.returnHelpInfo(stg_id=callback_data.id)
 
     await query.message.edit_text(f"{answer}\n", reply_markup=stg_choose_keybord(stg_id=callback_data.id))
+
+@dp.callback_query(ChooseStgCallback.filter(F.foo == 'stg_backtest'))
+async def callback_choose_stg(query: CallbackQuery, callback_data: ChooseStgCallback):
+    answer = 'Backtest текущей стратегии\n'
+    stgObj = getStgObjFromClass(stg_id=callback_data.id)
+    answer = stgObj.backtest()
+    await query.message.edit_text(f"{answer}\n", reply_markup=stg_choose_keybord(stg_id=callback_data.id))
+
 
 ''' TRADE STRATEGY COMMAND'''
 

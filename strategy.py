@@ -1,9 +1,14 @@
 import asyncio
-import math
-import time
-import uuid
 from contextlib import closing
-from aiogram import types
+
+from PIL import Image
+
+from datetime import datetime, timedelta
+import pandas as pd
+
+import matplotlib
+matplotlib.use('TkAgg')
+import matplotlib.pyplot as plt
 
 import emoji #https://carpedm20.github.io/emoji/
 from pybit import exceptions
@@ -83,7 +88,7 @@ class Api_Trade_Method():
                 testnet=False,
                 api_key=bybit_key,
                 api_secret=bybit_secret,
-                recv_window="8000"
+                recv_window=8000
             )
         session.close()
         return session_api
@@ -140,7 +145,7 @@ class Api_Trade_Method():
                limit=1,
                 )
             if not get_history['result']['list']:
-                await asyncio.sleep(2)
+                await asyncio.sleep(0)
                 get_history = self.api_session.get_order_history(
                     category="linear",
                     orderId=orderId,
@@ -154,7 +159,7 @@ class Api_Trade_Method():
         #print(f"order_dict {order_dict}\n")
         try:
             fee = self.api_session.get_fee_rates(
-                symbol=symbol,
+                symbol=str(symbol),
             )
             return {
                 'takerFeeRate': fee['result']['list'][0]['takerFeeRate'],
@@ -165,16 +170,16 @@ class Api_Trade_Method():
 
 
     def LastTakeProfitOrder(self, symbol: str, limit: int):
-        try:
-            return self.api_session.get_open_orders(
-                category="linear",
-                symbol=symbol,
-                #openOnly=0,
-                limit=limit,
-                )
-        except Exception as api_err:
-            print(f"\nLastTakeProfitOrder exception: {api_err.args}\n")
-        return {'error': api_err.args}
+        #try:
+        last_tp = self.api_session.get_open_orders(
+            category="linear",
+            symbol=symbol,
+            limit=limit,
+            )
+        return last_tp
+        #except Exception as api_err:
+        #    print(f"\nLastTakeProfitOrder exception: {api_err.args}\n")
+        #    return {'error': api_err.args}
 
 class Strategy_Step(Api_Trade_Method):
     symbol: str
@@ -209,11 +214,13 @@ class Strategy_Step(Api_Trade_Method):
             #print(f"lastprice {all_price['lastPrice']}")
             lastPrice = round(float(all_price['lastPrice']), self.decimal_part)
             stepPrice = float(self.stg_dict['step'])
+            print(f'lastPrice {lastPrice} - stepPrice {stepPrice}')
             # Вывод количества символов после точки
             dev = str(lastPrice / stepPrice).split('.')[1]
             #dev = round(float(lastPrice) % float(stepPrice),len(decimal_part))
             #print(f'dev {dev} lastprice {lastPrice} steprpice {stepPrice} | / {float(lastPrice / stepPrice)} |decimal part {decimal_part} len {len(decimal_part)}')
             if int(dev[0]) == 0:
+                print(dev[0])
                 await self.tryBuy(lastPrice)
         else:
             print(f"answer {ddict['answer']}")
@@ -244,7 +251,7 @@ class Strategy_Step(Api_Trade_Method):
                         tx = self.BuyMarket(self.symbol, self.stg_dict['amount'])
                     if 'error' not in tx:
                         order_info = await self.OrderHistory(tx['result']['orderId'])
-                        print(f'order_info 1 {order_info}')
+                        #print(f'order_info 1 {order_info}')
                         buy_price = order_info['result']['list'][0]['cumExecValue']
                         tx['result']['price'] = buy_price
                         tp_order_dict = {
@@ -274,11 +281,14 @@ class Strategy_Step(Api_Trade_Method):
                         config.update_message = True
         else:
             tx = self.BuyMarket(self.symbol, self.stg_dict['amount'])
-            print(f"else price COUNT - {priceCountQ.count()} | deals = {self.stg_dict['deals']}\n")
+            priceCountQ = self.session.query(TradeHistory).filter_by(price=str(lastPrice), filled=False)
+            lastTX = tradeQ.first()
+            print(f'\nlastTX {lastTX.price}')
+            print(f"else price COUNT - {priceCountQ.count()} | lastprice = {lastPrice}  |  | deals = {self.stg_dict['deals']}\n")
             if 'error' not in tx:
-                print(f"orderid {tx}\n")
+                #print(f"orderid {tx}\n")
                 order_info = await self.OrderHistory(tx['result']['orderId'])
-                print(f'order_info 2 {order_info}\n')
+                #print(f'order_info 2 {order_info}\n')
                 buy_price = order_info['result']['list'][0]['cumExecValue']
                 tx['result']['price'] = buy_price
                 order_dict = {
@@ -332,6 +342,7 @@ class Strategy_Step(Api_Trade_Method):
         self.session = create_session()
         tp = self.LastTakeProfitOrder(symbol=self.symbol, limit=50)
         historyQ = self.session.query(TradeHistory).filter_by(filled=False)
+        #print(f'tp cleanHistory {tp} - {self.symbol}')
         for tx in historyQ:
             if not any(tx.tp_id in d.values() for d in tp['result']['list']):
                 tx.filled = True
@@ -559,6 +570,51 @@ class Strategy_Step(Api_Trade_Method):
             feb_prev = feb_curr
             feb_curr = feb_next
         return feb_next
+
+    def backtest(self):
+        print('tyt')
+        now = datetime.now()
+        two_days_ago = now - timedelta(days=2)
+        timestamp = int(two_days_ago.timestamp())
+        klines = self.api_session.get_kline(
+            category="linear",
+            symbol="TONUSDT",
+            interval=1,
+            #start=timestamp,
+            #end=now.timestamp(),
+            limit=1000
+
+        )
+        print(klines['result']['list'][1])
+        data = klines['result']['list']
+        columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume', 'turnover']
+        df = pd.DataFrame(data, columns=columns)
+        df['open'] = df['open'].astype(float)
+        df['high'] = df['high'].astype(float)
+        df['low'] = df['low'].astype(float)
+        df['close'] = df['close'].astype(float)
+        df['volume'] = df['volume'].astype(float)
+        df['turnover'] = df['turnover'].astype(float)
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        # Установка timestamp как индекса DataFrame
+        df.set_index('timestamp', inplace=True)
+
+        plt.figure(figsize=(12, 6))
+        plt.plot(df['close'], label='Close Price')
+        plt.title('Close Price Chart')
+        plt.xlabel('Timestamp')
+        plt.ylabel('Price')
+        plt.savefig('plot.png')
+        plt.close()
+        config.image_path = 'plot.png'
+        config.format_message = 'image'
+        config.update_message = True
+        #plt.legend()
+        #plt.show()
+
+        return 'Backtest'
+
+
 
 
 

@@ -6,6 +6,7 @@ from sqlalchemy import exc, create_engine
 from models import User
 
 
+
 def getEngine():    # Создаем строку подключения
     connection_string = f'postgresql+psycopg2://{secret_config.user_db.get_secret_value()}:{secret_config.pass_db.get_secret_value()}@{secret_config.host_db.get_secret_value()}/{secret_config.name_db.get_secret_value()}'
     try:
@@ -34,9 +35,11 @@ class Settings():
     chat_id: int = None
     message: str = None
     last_message: str = None
+    image_path = None
 
     def __init__(self):
         self.update_message = False
+        self.format_message = 'text' # image, text
 
     def getTgId(self, user_id: int):
         Session = sessionmaker(getEngine())
