@@ -1,8 +1,6 @@
 import asyncio
 from contextlib import closing
 
-from PIL import Image
-
 from datetime import datetime, timedelta
 import pandas as pd
 
@@ -283,7 +281,7 @@ class Strategy_Step(Api_Trade_Method):
             tx = self.BuyMarket(self.symbol, self.stg_dict['amount'])
             priceCountQ = self.session.query(TradeHistory).filter_by(price=str(lastPrice), filled=False)
             lastTX = tradeQ.first()
-            print(f'\nlastTX {lastTX.price}')
+            #print(f'\nlastTX {lastTX.price}')
             print(f"else price COUNT - {priceCountQ.count()} | lastprice = {lastPrice}  |  | deals = {self.stg_dict['deals']}\n")
             if 'error' not in tx:
                 #print(f"orderid {tx}\n")
@@ -599,11 +597,89 @@ class Strategy_Step(Api_Trade_Method):
         # Установка timestamp как индекса DataFrame
         df.set_index('timestamp', inplace=True)
 
-        plt.figure(figsize=(12, 6))
-        plt.plot(df['close'], label='Close Price')
-        plt.title('Close Price Chart')
-        plt.xlabel('Timestamp')
+        # Рассчитываем Bollinger Bands
+        upperband, middleband, lowerband = talib.BBANDS(df['close'], timeperiod=20, nbdevup=2, nbdevdn=2, matype=0)
+        df['upper_band'] = upperband
+        df['lower_band'] = lowerband
+
+        # Торговая стратегия
+        buys = []
+        sells = []
+        positions = False
+        profit = 0
+
+        for i in range(1, len(df)):
+            if df['close'].iloc[i] < df['lower_band'].iloc[i] and not positions:
+                # Покупаем, если цена упала ниже нижней границы и у нас нет открытых позиций
+                buys.append((i, df['close'].iloc[i]))
+                last_buy_price = df['close'].iloc[i]
+                positions = True
+            elif df['close'].iloc[i] > df['upper_band'].iloc[i] and positions:
+                # Продаём, если цена поднялась выше верхней границы и у нас есть открытая покупка
+                sells.append((i, df['close'].iloc[i]))
+                profit += (df['close'].iloc[i] - last_buy_price)
+                positions = False
+
+        # Визуализация цен и Bollinger Bands
+        plt.figure(figsize=(14, 7))
+        plt.plot(df['close'], label='Close Price', color='gray')
+        plt.plot(df['upper_band'], label='Upper Band', linestyle='--', color='red')
+        plt.plot(df['lower_band'], label='Lower Band', linestyle='--', color='green')
+        plt.scatter(*zip(*buys), color='green', label='Buy Signal', marker='^', s=100)
+        plt.scatter(*zip(*sells), color='red', label='Sell Signal', marker='v', s=100)
+        plt.title('Price Chart with Bollinger Bands and Trading Signals')
+        plt.xlabel('Time')
         plt.ylabel('Price')
+        # Добавление текста с статистикой
+        textstr = f'Number of Buys: {len(buys)}\nNumber of Sells: {len(sells)}\nTotal Profit: {profit:.2f}'
+        plt.gcf().text(0.02, 0.02, textstr, fontsize=12)  # Использование координат фигуры для размещения текста
+        '''
+        # Инициализация переменных
+        last_buy_price = None
+        profit = 0
+        trades = []
+        buy_signals = []
+        sell_signals = []
+
+        # Параметры стратегии
+        price_movement = 0.02
+
+        # Проходим по всем строкам данных
+        for index, row in df.iterrows():
+            current_price = row['close']
+
+            # Проверяем условия для покупки
+            if last_buy_price is None or (current_price >= last_buy_price + price_movement) or (
+                    current_price <= last_buy_price - price_movement):
+                # Регистрируем покупку
+                last_buy_price = current_price
+                trades.append(('buy', current_price, index))  # добавляем индекс для визуализации
+                buy_signals.append((index, current_price))  # сохраняем индексы и цены покупок для графика
+
+            # Проверяем условие для тейк-профита
+            for trade in trades:
+                if trade[0] == 'buy' and current_price >= trade[1] + price_movement:
+                    profit += (current_price - trade[1] - price_movement)  # учитываем цену покупки и продажи
+                    sell_signals.append((index, current_price))  # добавляем момент продажи
+                    trades.remove(trade)  # закрываем позицию
+
+        # Построение графика
+        plt.figure(figsize=(14, 7))
+        plt.plot(df['close'], label='Close Price', color='gray')
+        plt.scatter(*zip(*buy_signals), color='green', label='Buy Signal', marker='^', s=100)
+        plt.scatter(*zip(*sell_signals), color='red', label='Sell Signal', marker='v', s=100)
+        plt.title('Price Chart with Buy and Sell Signals')
+        plt.xlabel('Time')
+        plt.ylabel('Price')
+
+
+        # Добавление текста с статистикой
+        textstr = f'Number of Buys: {len(buy_signals)}\nNumber of Sells: {len(sell_signals)}\nProfit: {profit:.2f}'
+        #plt.figtext(0.15, -0.1, textstr, wrap=True, horizontalalignment='left', fontsize=12)
+        plt.gcf().text(0.02, 0.02, textstr, fontsize=12)
+        
+        '''
+        plt.legend()
         plt.savefig('plot.png')
         plt.close()
         config.image_path = 'plot.png'
