@@ -1,208 +1,77 @@
 import asyncio
-from contextlib import closing
 
-from datetime import datetime, timedelta
+from strategy import Api_Trade_Method
 
-import numpy as np
-import pandas as pd
-
-import matplotlib
-import talib
-matplotlib.use('TkAgg')
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-from sklearn.linear_model import LinearRegression
-
-
-import emoji #https://carpedm20.github.io/emoji/
-from pybit import exceptions
-from pybit.exceptions import InvalidRequestError
-from sqlalchemy import select, Null, update
-from sqlalchemy.exc import NoResultFound
-from sqlalchemy.orm import Session, sessionmaker
-
-from pybit.unified_trading import HTTP #https://www.bybit.com/en/help-center/s/webform?language=en_US
-
-from utils_db import getEngine
-from models import Strategy, TradeHistory
-from config import config
-# http://192.168.0.21/pgadmin4/login?next=%2Fpgadmin4%2Fbrowser%2Fpip install --upgrade pip setuptools wheel
-
-# ladder_stg
-# - fibo торгует по фибоначчи, если указана только одна сторона, торгует в обратную сторону на указанный amount
-# - fibo если указаны две стороны, торгует fibo в каждую сторону начиная с 1
+cnn_model = {
+        'TONUSDT':
+                    [
+                    {
+                            'model': '1m.keras',
+                            'scelar': '1m.gz',
+                            'window_size': 10,
+                            'predict_percent': 0.63,
+                            'trade': 'long',
+                            'numeric': ['open', 'high', 'low', 'close', 'taker_buy_volume'],
+                            'comment': 'Обучен на месяце'
+                    },
+                    {
+                            'model': '5m.keras',
+                            'scelar': '5m.gz',
+                            'window_size': 5,
+                            'predict_percent': 0.7,
+                            'trade': 'long',
+                            'numeric': ['open', 'high', 'low', 'close', 'taker_buy_volume'],
+                            'comment': 'Обучен на месяце'
+                    },
+                        {
+                            'model': '15m.keras',
+                            'scelar': '15m.gz',
+                            'window_size': 3,
+                            'predict_percent': 0.65,
+                            'trade': 'long',
+                            'numeric': ['open', 'high', 'low', 'close', 'taker_buy_volume'],
+                            'comment': 'Обучен на 2 месяцах'
+                        },
+                        {
+                            'model': '30m.keras',
+                            'scelar': '30m.gz',
+                            'window_size': 3,
+                            'predict_percent': 0.63,
+                            'trade': 'long',
+                            'numeric': ['open', 'high', 'low', 'close', 'taker_buy_volume'],
+                            'comment': 'Обучен на 2 месяцах'
+                        },
+                    ]
+            }
 
 stg_dict = {
-    'ladder_stg':
-        {
-            'stg_name': 'ladder_stg',
-            'name': 'Лесенка',
-            'desc': 'Стратегия торговли лесенкой',
-            'step': '0.02',
-            'amount': '1.0',
-            'deals': 1,
-            'ctg': 'linear',
-            'fibo': False,
-            'move': 'two', # up, down, two
-            'x': 1,
-            'exch': ''
-        },
-    'ai_cnn': ai_cnn.stg_dict
-}
+    'ai_cnn':
+            {
+                'stg_name': 'ai_cnn',
+                'name': 'Ai CNN',
+                'desc': 'Стратегия торговли Ai CNN',
+                'amount': '1.0',
+                'deals': 1,
+                'ctg': 'linear',
+                'exch': ''
+                        'cnn_model': cnn_model.
+            }}
 
-def create_session():
-    Session = sessionmaker(getEngine())
-    return Session()
-
-def splitCommandStg(stgedit: str):
-    try:
-        stg, stg_id, key, value = stgedit.split(" ", maxsplit=3)
-        stg_id = stg_id.split("=", 1)[-1].strip()
-    except ValueError:
-        return "Ошибка: не указаны все параметры.\n"
-    stgObj = getStgObjFromClass(stg_id=stg_id, stg_name=stg)
-    return stgObj.getCommandValue(key=key, value=value)
-
-# получаем класс и отдаем объект на основе этого класса
-def getStgObjFromClass(stg_id: int, stg_name: str = None) -> classmethod:
-    session = create_session()
-    query = session.query(Strategy).filter_by(id=stg_id).one()
-    if stg_id:
-        if query.stg_name == 'ladder_stg':
-            createStgObj = Strategy_Step(stg_id=stg_id, user_id=query.user.id)
-            session.close()
-            return createStgObj
-    if stg_name:
-        if stg_name == 'ladder_stg':
-            createStgObj = Strategy_Step(stg_id=stg_id, user_id=query.user.id)
-            session.close()
-            return createStgObj
-    return None
-
-class Api_Trade_Method():
-    api_session: None
-
-        # https://bybit-exchange.github.io/docs/v5/intro
-    def makeSession(self, stg_id: int):
-        session_api = None
-        session = create_session()
-        api = session.query(Strategy).filter_by(id=stg_id).one()
-        if api.user.api:
-            for bybit in api.user.api:
-                bybit_key = bybit.bybit_key
-                bybit_secret = bybit.bybit_secret
-            session_api = HTTP(
-                testnet=False,
-                api_key=bybit_key,
-                api_secret=bybit_secret,
-                recv_window=8000
-            )
-        session.close()
-        return session_api
-
-    def getCurrentPrice(self, symbol: str):
-        #self.api_session = HTTP(testnet=False)
-        return self.api_session.get_tickers(
-            category="spot",
-            symbol=symbol,
-        )
-
-    def BuyMarket(self, symbol: str, qty: int, tp: str = None, uuid: str = None):
-        try:
-            return self.api_session.place_order(
-                category="linear",
-                symbol=symbol,
-                side="Buy",
-                orderType="Market",
-                qty=qty,
-                orderLinkId=uuid
-            )
-        except Exception as api_err:
-            err_split = api_err.args[0]
-            err_split = err_split.split(")", 1)[0]
-            if '110007' in err_split:
-                return {'error': emoji.emojize(":ZZZ:") + " Нет денег на счету для следующей покупки", 'code': api_err.args[0]}
-            return {'error': err_split, 'code': api_err.args[0]}
-
-
-    def TakeProfit(self, order_dict):
-        try:
-           return self.api_session.set_trading_stop(
-                category="linear",
-                symbol="TONUSDT",
-                takeProfit=str(order_dict['tp_price']),
-                tpTriggerBy="MarkPrice",
-                tpslMode="Partial",
-                tpOrderType="Limit",
-                tpSize=str(order_dict['qty']),
-                tpLimitPrice=str(order_dict['tp_price']),
-                positionIdx=0,
-                orderLinkId=order_dict['uuid'],
-                )
-        except Exception as api_err:
-            print(f"takeProfit={str(order_dict['tp_price'])}")
-            print(f"tpSize={str(order_dict['qty'])}")
-            return {'error': api_err}
-
-    async def OrderHistory(self, orderId = None):
-        try:
-            get_history = self.api_session.get_order_history(
-               category="linear",
-               orderId=orderId,
-               limit=1,
-                )
-            if not get_history['result']['list']:
-                await asyncio.sleep(0)
-                get_history = self.api_session.get_order_history(
-                    category="linear",
-                    orderId=orderId,
-                    limit=1,
-                )
-            return get_history
-        except Exception as api_err:
-            return {'error': api_err}
-
-    def getFeeRate(self, symbol: str):
-        #print(f"order_dict {order_dict}\n")
-        try:
-            fee = self.api_session.get_fee_rates(
-                symbol=str(symbol),
-            )
-            return {
-                'takerFeeRate': fee['result']['list'][0]['takerFeeRate'],
-                'makerFeeRate': fee['result']['list'][0]['makerFeeRate']
-                }
-        except Exception as api_err:
-            print(f"\nGet fee EXCEPTION: {api_err.args}\n")
-
-
-    def LastTakeProfitOrder(self, symbol: str, limit: int):
-        #try:
-        last_tp = self.api_session.get_open_orders(
-            category="linear",
-            symbol=symbol,
-            limit=limit,
-            )
-        return last_tp
-        #except Exception as api_err:
-        #    print(f"\nLastTakeProfitOrder exception: {api_err.args}\n")
-        #    return {'error': api_err.args}
-
-class Strategy_Step(Api_Trade_Method):
+class Strategy_ai_cnn(Api_Trade_Method):
     symbol: str
-    decimal_part: int
     uuid: str
     session: None
+    predict_dict: None
 
     def __init__(self, stg_id, user_id):
         self.stg_id = stg_id
         self.api_session = self.makeSession(stg_id=stg_id)
         self.user_id = user_id
-        self.stg_name = 'ladder_stg'
+        self.stg_name = 'ai_cnn'
         self.stg_dict = self.getStgDictFromBD()
         config.getTgId(user_id=user_id)
         self.fee = self.getFeeRate(symbol=self.symbol)
-
+        self.decimal_part = len(str(self.stg_dict['step']).split('.')[1])
 
     async def Start(self):
         # получаем теущую цену +
@@ -210,55 +79,43 @@ class Strategy_Step(Api_Trade_Method):
         # тут же ставиться стоп на цену шага выше
         # запоминается время покупки в базу и стоп по этой покупке
         # если происходит покупка снова по этой цене, а старый тейкпрофит еще в базе, удаляется старый тейкпрофит и ставится новый двойной
-        ddict = self.StopStartStg()
-        if ddict['start'] == True:
-            self.cleanHistory()
-            decimal_part = str(self.stg_dict['step'])
-            decimal_part = decimal_part.split('.')[1]
-            self.decimal_part = len(decimal_part)
-            ticker = self.getCurrentPrice(symbol=self.symbol)
-            all_price = ticker['result']['list'][0]
-            #print(f"lastprice {all_price['lastPrice']}")
-            lastPrice = round(float(all_price['lastPrice']), self.decimal_part)
-            stepPrice = float(self.stg_dict['step'])
-            print(f'lastPrice {lastPrice} - stepPrice {stepPrice}')
-            # Вывод количества символов после точки
-            dev = str(lastPrice / stepPrice).split('.')[1]
-            #dev = round(float(lastPrice) % float(stepPrice),len(decimal_part))
-            #print(f'dev {dev} lastprice {lastPrice} steprpice {stepPrice} | / {float(lastPrice / stepPrice)} |decimal part {decimal_part} len {len(decimal_part)}')
-            if int(dev[0]) == 0:
-                print(dev[0])
+        if self.CheckStopStartStg():
+            self.session = create_session()
+            self.checkTakeProfit()
+            self.predict_dict = await self.checkAiPredict()
+            if predict_dict['buy']:
                 await self.tryBuy(lastPrice)
         else:
             print(f"answer {ddict['answer']}")
-            #simple_message_from_threading(answer=ddict['answer'])
+            # simple_message_from_threading(answer=ddict['answer'])
 
     async def tryBuy(self, lastPrice):
-        #self.uuid = str(uuid.uuid4())
+        # self.uuid = str(uuid.uuid4())
         self.stg_dict = self.getStgDictFromBD()
         tp = round(lastPrice + float(self.stg_dict['step']), self.decimal_part)
-        self.session = create_session()
         tradeQ = self.session.query(TradeHistory).order_by(TradeHistory.id.desc())
         priceCountQ = self.session.query(TradeHistory).filter_by(price=str(lastPrice), filled=False)
         if priceCountQ.first():
             lastTX = tradeQ.first()
             if int(self.stg_dict['deals']) >= priceCountQ.count() and lastTX.price == str(lastPrice):
-                #print(f'IF {lastPrice} = {lastTX.price}')
-                #print(f"deals {self.stg_dict['deals']} >= {priceCountQ.count()}")
+                # print(f'IF {lastPrice} = {lastTX.price}')
+                # print(f"deals {self.stg_dict['deals']} >= {priceCountQ.count()}")
                 pass
             else:
-                #print(f'ELSE {lastPrice} | {lastTX.price}')
-                if (self.stg_dict['move'] == 'down' and float(lastPrice) < float(lastTX.price)) or (self.stg_dict['move'] == 'up' and float(lastPrice) > float(lastTX.price)) or self.stg_dict['move'] == 'two':
+                # print(f'ELSE {lastPrice} | {lastTX.price}')
+                if (self.stg_dict['move'] == 'down' and float(lastPrice) < float(lastTX.price)) or (
+                        self.stg_dict['move'] == 'up' and float(lastPrice) > float(lastTX.price)) or self.stg_dict[
+                    'move'] == 'two':
                     print(f"price COUNT 2 {priceCountQ.count()} | deals = {self.stg_dict['deals']}\n")
                     if self.stg_dict['fibo']:
-                        #fibo_next_num
+                        # fibo_next_num
                         fibo_amount = 1
                         tx = self.BuyMarket(self.symbol, fibo_amount)
                     else:
                         tx = self.BuyMarket(self.symbol, self.stg_dict['amount'])
                     if 'error' not in tx:
                         order_info = await self.OrderHistory(tx['result']['orderId'])
-                        #print(f'order_info 1 {order_info}')
+                        # print(f'order_info 1 {order_info}')
                         buy_price = order_info['result']['list'][0]['cumExecValue']
                         tx['result']['price'] = buy_price
                         tp_order_dict = {
@@ -276,7 +133,8 @@ class Strategy_Step(Api_Trade_Method):
                             tx['result']['price'] = round(float(buy_price), self.decimal_part)
                             tx['result']['tpOrderId'] = last_tp['result']['list'][0]['orderId']
                             self.createTX(tx=tx, tp=last_tp)
-                            config.message = emoji.emojize(":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} повторно по {buy_price} [{self.stg_dict['name']}]"
+                            config.message = emoji.emojize(
+                                ":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} повторно по {buy_price} [{self.stg_dict['name']}]"
 
                         else:
                             config.message = emoji.emojize(
@@ -290,12 +148,13 @@ class Strategy_Step(Api_Trade_Method):
             tx = self.BuyMarket(self.symbol, self.stg_dict['amount'])
             priceCountQ = self.session.query(TradeHistory).filter_by(price=str(lastPrice), filled=False)
             lastTX = tradeQ.first()
-            #print(f'\nlastTX {lastTX.price}')
-            print(f"else price COUNT - {priceCountQ.count()} | lastprice = {lastPrice}  |  | deals = {self.stg_dict['deals']}\n")
+            # print(f'\nlastTX {lastTX.price}')
+            print(
+                f"else price COUNT - {priceCountQ.count()} | lastprice = {lastPrice}  |  | deals = {self.stg_dict['deals']}\n")
             if 'error' not in tx:
-                #print(f"orderid {tx}\n")
+                # print(f"orderid {tx}\n")
                 order_info = await self.OrderHistory(tx['result']['orderId'])
-                #print(f'order_info 2 {order_info}\n')
+                # print(f'order_info 2 {order_info}\n')
                 buy_price = order_info['result']['list'][0]['cumExecValue']
                 tx['result']['price'] = buy_price
                 order_dict = {
@@ -308,15 +167,16 @@ class Strategy_Step(Api_Trade_Method):
                     'uuid': tx['result']['orderId']
                 }
                 tp = self.TakeProfit(order_dict=order_dict)
-                #print(f'tp {tp}')
+                # print(f'tp {tp}')
                 if tp is not None and isinstance(tp, dict) and 'error' not in tp:
                     last_tp = self.LastTakeProfitOrder(symbol=self.symbol, limit=1)
-                    #print(f"tx buy {tx['result']}")
+                    # print(f"tx buy {tx['result']}")
                     tx['result']['price'] = round(float(buy_price), self.decimal_part)
                     tx['result']['tpOrderId'] = last_tp['result']['list'][0]['orderId']
                     tx_obj = self.createTX(tx=tx, tp=last_tp)
-                    #print(f"tp else {tp}")
-                    config.message = emoji.emojize(":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} по {buy_price} [{self.stg_dict['name']}]"
+                    # print(f"tp else {tp}")
+                    config.message = emoji.emojize(
+                        ":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} по {buy_price} [{self.stg_dict['name']}]"
                 else:
                     config.message = emoji.emojize(
                         ":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} по {buy_price} [{self.stg_dict['name']}]" \
@@ -325,31 +185,37 @@ class Strategy_Step(Api_Trade_Method):
             else:
                 config.message = tx['error']
                 config.update_message = True
-        #- если купили ставим стоп на шаг выше
-        #- если это вторая покупка по цене, отменяем первый стоп и и ставим новый умноженный на 2
+        # - если купили ставим стоп на шаг выше
+        # - если это вторая покупка по цене, отменяем первый стоп и и ставим новый умноженный на 2
         self.session.close()
 
     def createTX(self, tx: dict, tp: dict):
-        #print(f"tx {tx['result']}")
-        #print(f"tp {tp['result']}")
+        # print(f"tx {tx['result']}")
+        # print(f"tp {tp['result']}")
         tx_dict = {
             'price_clean': tp['result']['list'][0]['lastPriceOnCreated'],
             'tp': tp['result']['list'][0]['price'],
             'side': tp['result']['list'][0]['side'],
             'qty': tp['result']['list'][0]['qty']
         }
-        createTx = TradeHistory(price=tx['result']['price'], tx_id=tx['result']['orderId'], tx_dict=tx_dict, stg_id=self.stg_id, user_id=self.user_id,
+        createTx = TradeHistory(price=tx['result']['price'], tx_id=tx['result']['orderId'], tx_dict=tx_dict,
+                                stg_id=self.stg_id, user_id=self.user_id,
                                 tp_id=tx['result']['tpOrderId']
                                 )
         self.session.add(createTx)
         self.session.commit()
         return createTx
 
+    def checkAiPredict(self):
+
+
+    def checkTakeProfit(self):
+        self.cleanHistory()
+
     def cleanHistory(self):
-        self.session = create_session()
         tp = self.LastTakeProfitOrder(symbol=self.symbol, limit=50)
         historyQ = self.session.query(TradeHistory).filter_by(filled=False)
-        #print(f'tp cleanHistory {tp} - {self.symbol}')
+        # print(f'tp cleanHistory {tp} - {self.symbol}')
         for tx in historyQ:
             if not any(tx.tp_id in d.values() for d in tp['result']['list']):
                 tx.filled = True
@@ -358,8 +224,10 @@ class Strategy_Step(Api_Trade_Method):
                 earn = None
                 percent = None
                 try:
-                    fee = round(((float(tx_dict['price_clean']) * float(self.fee['takerFeeRate'])) + (float(tx_dict['tp']) * float(self.fee['makerFeeRate']))) * int(tx_dict['qty']), 3)
-                    earn = round(((float(tx_dict['tp']) - float(tx_dict['price_clean'])) * int(tx_dict['qty'])) - fee, 3)
+                    fee = round(((float(tx_dict['price_clean']) * float(self.fee['takerFeeRate'])) + (
+                                float(tx_dict['tp']) * float(self.fee['makerFeeRate']))) * int(tx_dict['qty']), 3)
+                    earn = round(((float(tx_dict['tp']) - float(tx_dict['price_clean'])) * int(tx_dict['qty'])) - fee,
+                                 3)
                     percent = round((earn / float(tx_dict['price_clean'])) * 100, 3)
                     config.message = emoji.emojize(
                         ":money_with_wings:") + f" Сработал TakeProfit {round(float(tx_dict['tp']), 3)}, чистая прибыль {earn} usdt ({percent}%), комиссия {fee} [{self.stg_dict['name']}, {self.symbol}]"
@@ -371,8 +239,9 @@ class Strategy_Step(Api_Trade_Method):
         self.session.close()
 
     '''telegram bot func'''
+
     # включить или выключить стратегию торговли
-    def StopStartStg(self, change: bool = None) -> dict:
+    def CheckStopStartStg(self, change: bool = None) -> dict:
         return_dict = {}
         return_dict['answer'] = ''
         with closing(Session(getEngine())) as session:
@@ -381,24 +250,16 @@ class Strategy_Step(Api_Trade_Method):
                 if change is not None:
                     query.start = False if query.start else True
                 stg_dict = query.stg_dict
-                step = str(stg_dict['step'])
-                if not stg_dict['step'] or float(step.replace(",", ".")) <= 0.0:
-                    return_dict['answer'] = '<b>Нельзя запустить!</b>\n У вас не настроен шаг стратегии' + emoji.emojize(
-                        ":backhand_index_pointing_left:") +'\n'
-                    query.start = False
                 if not stg_dict['amount'] or float(step.replace(",", ".")) <= 0.0:
-                    return_dict['answer'] = '<b>Нельзя запустить!</b>\n У вас не настроена сумма сделки' + emoji.emojize(
-                        ":backhand_index_pointing_left:") + '\n'
-                    query.start = False
-                if not stg_dict['deals'] or int(stg_dict['deals']) <= 0:
-                    return_dict['answer'] = '<b>Нельзя запустить!</b>\n У вас не настроено количество сделок на одну цену' + emoji.emojize(
+                    return_dict[
+                        'answer'] = '<b>Нельзя запустить!</b>\n У вас не настроена сумма сделки' + emoji.emojize(
                         ":backhand_index_pointing_left:") + '\n'
                     query.start = False
             else:
                 return_dict['answer'] = '<b>Нельзя запустить ' + emoji.emojize(
                     ":backhand_index_pointing_left:") + '</b>, у вас не указана стратегия\n'
             return_dict['start'] = query.start
-            #print(f"start {return_dict['start']}")
+            # print(f"start {return_dict['start']}")
             session.commit()
         return return_dict
 
@@ -407,7 +268,7 @@ class Strategy_Step(Api_Trade_Method):
                + "\nВводите команды для настройки стратегии\n" \
                + f"\nдля этой стратегии укажите <b>id={stg_id}</b>\n" \
                + f"\n/stgedit ladder_stg id={stg_id} active true - Выбрать эту стратегию\n" \
-               +f"/stgedit ladder_stg id={stg_id} step 0.5 - шаг в USDT (min 20 pips)\n" \
+               + f"/stgedit ladder_stg id={stg_id} step 0.5 - шаг в USDT (min 20 pips)\n" \
                + f"/stgedit ladder_stg id={stg_id} deals 2 - количество сделок на одну цену\n" \
                + f"/stgedit ladder_stg id={stg_id} ctg spot - spot или linear\n" \
                + f"/stgedit ladder_stg id={stg_id} x 2 - плечо\n" \
@@ -424,7 +285,8 @@ class Strategy_Step(Api_Trade_Method):
             else:
                 if key.lower() == 'active':
                     if value:
-                        result = f'<b>Стратегия Лесенка ' + emoji.emojize(":chart_increasing:") + f' активирована для {query.symbol} ({self.stg_id})</b>\nДля ее работы надо указать все настройки и после этого запустить.\n\n'
+                        result = f'<b>Стратегия Лесенка ' + emoji.emojize(
+                            ":chart_increasing:") + f' активирована для {query.symbol} ({self.stg_id})</b>\nДля ее работы надо указать все настройки и после этого запустить.\n\n'
                         query.stg_dict = stg_dict['ladder_stg']
                         result += 'Вы обновили статегию, поэтому настройки выставлены <u>по умолчанию</u>, не забудьте их изменить\n\n'
 
@@ -495,7 +357,7 @@ class Strategy_Step(Api_Trade_Method):
                             session.commit()
                             result = f'Вы указали движение торговли <b>{value}</b>\n\n'
                         else:
-                             result = f'Вы указали не допустимое движение для торговли\n\n'
+                            result = f'Вы указали не допустимое движение для торговли\n\n'
 
                     if key == 'fibo':
                         if value.lower() == 'false' or value.lower() == 'true':
@@ -506,7 +368,7 @@ class Strategy_Step(Api_Trade_Method):
                             session.commit()
                             result = f'Вы указали значение <b>{value}</b> для торговли по Фиббоначи\n\n'
                         else:
-                             result = f'Вы указали не правильное значение для торговли Фиббоначи\n\n'
+                            result = f'Вы указали не правильное значение для торговли Фиббоначи\n\n'
 
                     if key == 'amount':
                         if value:
@@ -564,19 +426,6 @@ class Strategy_Step(Api_Trade_Method):
             simple_message_from_threading(answer=answer)
             return True
         return False
-
-    def fibo_next_num(self, n: int) -> int:
-        # Возвращает список первых n чисел Фибоначчи
-        if n <= 0:
-            return 1
-        feb_prev = 1
-        feb_curr = 1
-        feb_next = 1
-        while feb_next <= n: # 13
-            feb_next = feb_prev + feb_curr
-            feb_prev = feb_curr
-            feb_curr = feb_next
-        return feb_next
 
     def backtest(self):
         now = datetime.now()
@@ -642,136 +491,3 @@ class Strategy_Step(Api_Trade_Method):
         # plt.show()
 
         return 'Backtest'
-
-    def backtest_Bollinger_Bands(self):
-        print('tyt')
-        now = datetime.now()
-        two_days_ago = now - timedelta(days=2)
-        timestamp = int(two_days_ago.timestamp())
-        klines = self.api_session.get_kline(
-            category="linear",
-            symbol="TONUSDT",
-            interval=1,
-            #start=timestamp,
-            #end=now.timestamp(),
-            limit=1000
-
-        )
-        print(klines['result']['list'][1])
-        data = klines['result']['list']
-        columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume', 'turnover']
-        df = pd.DataFrame(data, columns=columns)
-        df['close'] = pd.to_numeric(df['close'])
-
-        # Рассчитываем Bollinger Bands
-        upperband, middleband, lowerband = talib.BBANDS(df['close'], timeperiod=20, nbdevup=2, nbdevdn=2, matype=0)
-        df['upper_band'] = upperband
-        df['lower_band'] = lowerband
-        print(f'upperband {upperband}\n')
-        print(f'middleband {middleband}\n')
-        print(f'lowerband {lowerband}\n')
-
-        # Торговая стратегия
-        buys = []
-        sells = []
-        positions = False
-        profit = 0
-
-        for i in range(1, len(df)):
-            if df['close'].iloc[i] < df['lower_band'].iloc[i] and not positions:
-                # Покупаем, если цена упала ниже нижней границы и у нас нет открытых позиций
-                buys.append((i, df['close'].iloc[i]))
-                last_buy_price = df['close'].iloc[i]
-                positions = True
-            elif df['close'].iloc[i] > df['upper_band'].iloc[i] and positions:
-                # Продаём, если цена поднялась выше верхней границы и у нас есть открытая покупка
-                sells.append((i, df['close'].iloc[i]))
-                profit += (df['close'].iloc[i] - last_buy_price)
-                positions = False
-
-        # Визуализация цен и Bollinger Bands
-        plt.figure(figsize=(14, 7))
-        plt.plot(df['close'], label='Close Price', color='gray')
-        plt.plot(df['upper_band'], label='Upper Band', linestyle='--', color='red')
-        plt.plot(df['lower_band'], label='Lower Band', linestyle='--', color='green')
-        plt.scatter(*zip(*buys), color='green', label='Buy Signal', marker='^', s=100)
-        plt.scatter(*zip(*sells), color='red', label='Sell Signal', marker='v', s=100)
-        plt.title('Price Chart with Bollinger Bands and Trading Signals')
-        plt.xlabel('Time')
-        plt.ylabel('Price')
-        # Добавление текста с статистикой
-        textstr = f'Number of Buys: {len(buys)}\nNumber of Sells: {len(sells)}\nTotal Profit: {profit:.2f}'
-        plt.gcf().text(0.02, 0.02, textstr, fontsize=12)  # Использование координат фигуры для размещения текста
-        '''
-        # Инициализация переменных
-        last_buy_price = None
-        profit = 0
-        trades = []
-        buy_signals = []
-        sell_signals = []
-
-        # Параметры стратегии
-        price_movement = 0.02
-
-        df['open'] = df['open'].astype(float)
-        df['high'] = df['high'].astype(float)
-        df['low'] = df['low'].astype(float)
-        df['close'] = df['close'].astype(float)
-        df['volume'] = df['volume'].astype(float)
-        df['turnover'] = df['turnover'].astype(float)
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        # Установка timestamp как индекса DataFrame
-        df.set_index('timestamp', inplace=True)
-
-        # Проходим по всем строкам данных
-        for index, row in df.iterrows():
-            current_price = row['close']
-
-            # Проверяем условия для покупки
-            if last_buy_price is None or (current_price >= last_buy_price + price_movement) or (
-                    current_price <= last_buy_price - price_movement):
-                # Регистрируем покупку
-                last_buy_price = current_price
-                trades.append(('buy', current_price, index))  # добавляем индекс для визуализации
-                buy_signals.append((index, current_price))  # сохраняем индексы и цены покупок для графика
-
-            # Проверяем условие для тейк-профита
-            for trade in trades:
-                if trade[0] == 'buy' and current_price >= trade[1] + price_movement:
-                    profit += (current_price - trade[1] - price_movement)  # учитываем цену покупки и продажи
-                    sell_signals.append((index, current_price))  # добавляем момент продажи
-                    trades.remove(trade)  # закрываем позицию
-
-        # Построение графика
-        plt.figure(figsize=(14, 7))
-        plt.plot(df['close'], label='Close Price', color='gray')
-        plt.scatter(*zip(*buy_signals), color='green', label='Buy Signal', marker='^', s=100)
-        plt.scatter(*zip(*sell_signals), color='red', label='Sell Signal', marker='v', s=100)
-        plt.title('Price Chart with Buy and Sell Signals')
-        plt.xlabel('Time')
-        plt.ylabel('Price')
-
-
-        # Добавление текста с статистикой
-        textstr = f'Number of Buys: {len(buy_signals)}\nNumber of Sells: {len(sell_signals)}\nProfit: {profit:.2f}'
-        #plt.figtext(0.15, -0.1, textstr, wrap=True, horizontalalignment='left', fontsize=12)
-        plt.gcf().text(0.02, 0.02, textstr, fontsize=12)
-        
-        '''
-        plt.legend()
-        plt.savefig('plot.png')
-        plt.close()
-        config.image_path = 'plot.png'
-        config.format_message = 'image'
-        config.update_message = True
-        #plt.legend()
-        #plt.show()
-
-        return 'Backtest'
-
-
-
-
-
-
-
