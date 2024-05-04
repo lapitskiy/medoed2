@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from pybit.unified_trading import HTTP #https://www.bybit.com/en/help-center/s/webform?language=en_US
 
-from strategy import Api_Trade_Method
+from stg_router import Api_Trade_Method
 from utils_db import getEngine
 from models import Strategy, TradeHistory
 from config import config

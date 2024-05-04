@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload, Session, sessionmaker
 from models import User, Api, Strategy
 
 from config import config, secret_config
-from strategy import getStgObjFromClass
+from stg_router import getStgObjFromClass
 from utils_db import getEngine
 
 def create_session():

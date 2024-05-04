@@ -15,7 +15,7 @@ from keyboards import MyCallback, TradeCallback, EditStgCallback, ChooseStgCallb
     trade_keybord, stg_keybord, ReportCallback, report_keybord, stg_choose_keybord
 from models import User, Strategy
 
-from strategy import getStgObjFromClass, stg_dict, splitCommandStg
+from stg_router import getStgObjFromClass, stg_dict, splitCommandStg
 from config import config, secret_config
 from cl_thread import StartTrade
 
@@ -141,10 +141,10 @@ async def callback_edit_stg(query: CallbackQuery, callback_data: EditStgCallback
 async def callback_choose_stg(query: CallbackQuery, callback_data: ChooseStgCallback):
     answer = 'Выберите стратегию для получения помощи по настройке\n'
     if callback_data.stg_name in stg_dict:
-        #print(f'id call {callback_data.id}')
+        print(f'stg_name call {callback_data.stg_name}')
+        print(f'id call {callback_data.id}')
         stgObj = getStgObjFromClass(stg_id=callback_data.id, stg_name=callback_data.stg_name)
         answer = stgObj.returnHelpInfo(stg_id=callback_data.id)
-
     await query.message.edit_text(f"{answer}\n", reply_markup=stg_choose_keybord(stg_id=callback_data.id))
 
 @dp.callback_query(ChooseStgCallback.filter(F.foo == 'stg_backtest'))

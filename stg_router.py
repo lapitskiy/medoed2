@@ -1,6 +1,5 @@
 import asyncio
 from contextlib import closing
-
 from datetime import datetime, timedelta
 
 import numpy as np
@@ -8,6 +7,12 @@ import pandas as pd
 
 import matplotlib
 import talib
+
+from strategy.ai_cnn import Strategy_AI_CNN
+from trade_classes import Api_Trade_Method
+
+from strategy import ai_cnn
+
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
@@ -64,12 +69,17 @@ def splitCommandStg(stgedit: str):
     return stgObj.getCommandValue(key=key, value=value)
 
 # получаем класс и отдаем объект на основе этого класса
-def getStgObjFromClass(stg_id: int, stg_name: str = None) -> classmethod:
+def getStgObjFromClass(stg_id: int = None, stg_name: str = None) -> classmethod:
     session = create_session()
     query = session.query(Strategy).filter_by(id=stg_id).one()
-    if stg_id:
+    # вызывается класс с конкретной стратегией
+    if stg_id and stg_name is None:
         if query.stg_name == 'ladder_stg':
             createStgObj = Strategy_Step(stg_id=stg_id, user_id=query.user.id)
+            session.close()
+            return createStgObj
+        if query.stg_name == 'ai_cnn':
+            createStgObj = Strategy_ai_cnn(stg_id=stg_id, user_id=query.user.id)
             session.close()
             return createStgObj
     if stg_name:
@@ -77,116 +87,11 @@ def getStgObjFromClass(stg_id: int, stg_name: str = None) -> classmethod:
             createStgObj = Strategy_Step(stg_id=stg_id, user_id=query.user.id)
             session.close()
             return createStgObj
+        if stg_name == 'ai_cnn':
+            createStgObj = Strategy_AI_CNN(stg_id=stg_id, user_id=query.user.id)
+            session.close()
+            return createStgObj
     return None
-
-class Api_Trade_Method():
-    api_session: None
-
-        # https://bybit-exchange.github.io/docs/v5/intro
-    def makeSession(self, stg_id: int):
-        session_api = None
-        session = create_session()
-        api = session.query(Strategy).filter_by(id=stg_id).one()
-        if api.user.api:
-            for bybit in api.user.api:
-                bybit_key = bybit.bybit_key
-                bybit_secret = bybit.bybit_secret
-            session_api = HTTP(
-                testnet=False,
-                api_key=bybit_key,
-                api_secret=bybit_secret,
-                recv_window=8000
-            )
-        session.close()
-        return session_api
-
-    def getCurrentPrice(self, symbol: str):
-        #self.api_session = HTTP(testnet=False)
-        return self.api_session.get_tickers(
-            category="spot",
-            symbol=symbol,
-        )
-
-    def BuyMarket(self, symbol: str, qty: int, tp: str = None, uuid: str = None):
-        try:
-            return self.api_session.place_order(
-                category="linear",
-                symbol=symbol,
-                side="Buy",
-                orderType="Market",
-                qty=qty,
-                orderLinkId=uuid
-            )
-        except Exception as api_err:
-            err_split = api_err.args[0]
-            err_split = err_split.split(")", 1)[0]
-            if '110007' in err_split:
-                return {'error': emoji.emojize(":ZZZ:") + " Нет денег на счету для следующей покупки", 'code': api_err.args[0]}
-            return {'error': err_split, 'code': api_err.args[0]}
-
-
-    def TakeProfit(self, order_dict):
-        try:
-           return self.api_session.set_trading_stop(
-                category="linear",
-                symbol="TONUSDT",
-                takeProfit=str(order_dict['tp_price']),
-                tpTriggerBy="MarkPrice",
-                tpslMode="Partial",
-                tpOrderType="Limit",
-                tpSize=str(order_dict['qty']),
-                tpLimitPrice=str(order_dict['tp_price']),
-                positionIdx=0,
-                orderLinkId=order_dict['uuid'],
-                )
-        except Exception as api_err:
-            print(f"takeProfit={str(order_dict['tp_price'])}")
-            print(f"tpSize={str(order_dict['qty'])}")
-            return {'error': api_err}
-
-    async def OrderHistory(self, orderId = None):
-        try:
-            get_history = self.api_session.get_order_history(
-               category="linear",
-               orderId=orderId,
-               limit=1,
-                )
-            if not get_history['result']['list']:
-                await asyncio.sleep(0)
-                get_history = self.api_session.get_order_history(
-                    category="linear",
-                    orderId=orderId,
-                    limit=1,
-                )
-            return get_history
-        except Exception as api_err:
-            return {'error': api_err}
-
-    def getFeeRate(self, symbol: str):
-        #print(f"order_dict {order_dict}\n")
-        try:
-            fee = self.api_session.get_fee_rates(
-                symbol=str(symbol),
-            )
-            return {
-                'takerFeeRate': fee['result']['list'][0]['takerFeeRate'],
-                'makerFeeRate': fee['result']['list'][0]['makerFeeRate']
-                }
-        except Exception as api_err:
-            print(f"\nGet fee EXCEPTION: {api_err.args}\n")
-
-
-    def LastTakeProfitOrder(self, symbol: str, limit: int):
-        #try:
-        last_tp = self.api_session.get_open_orders(
-            category="linear",
-            symbol=symbol,
-            limit=limit,
-            )
-        return last_tp
-        #except Exception as api_err:
-        #    print(f"\nLastTakeProfitOrder exception: {api_err.args}\n")
-        #    return {'error': api_err.args}
 
 class Strategy_Step(Api_Trade_Method):
     symbol: str

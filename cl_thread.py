@@ -9,7 +9,7 @@ from models import Strategy
 #
 # поток связанный с торговлей на бинанс
 #
-from strategy import getStgObjFromClass
+from stg_router import getStgObjFromClass
 from utils_db import getEngine
 
 

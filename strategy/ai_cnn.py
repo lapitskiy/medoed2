@@ -1,41 +1,65 @@
-import asyncio
+from contextlib import closing
+from datetime import datetime, timedelta
 
-from strategy import Api_Trade_Method
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib
+
+from trade_classes import Api_Trade_Method
+
+matplotlib.use('Agg')
+from tensorflow.keras.models import load_model
+import joblib
+
+import emoji #https://carpedm20.github.io/emoji/
 
 cnn_model = {
         'TONUSDT':
                     [
                     {
+                            'coin': 'TONUSDT',
+                            'interval': '1',
                             'model': '1m.keras',
                             'scelar': '1m.gz',
                             'window_size': 10,
+                            'threshold_window': 0.01,
                             'predict_percent': 0.63,
                             'trade': 'long',
                             'numeric': ['open', 'high', 'low', 'close', 'taker_buy_volume'],
                             'comment': 'Обучен на месяце'
                     },
                     {
+                            'coin': 'TONUSDT',
+                            'interval': '5',
                             'model': '5m.keras',
                             'scelar': '5m.gz',
                             'window_size': 5,
+                            'threshold_window': 0.01,
                             'predict_percent': 0.7,
                             'trade': 'long',
                             'numeric': ['open', 'high', 'low', 'close', 'taker_buy_volume'],
                             'comment': 'Обучен на месяце'
                     },
                         {
+                            'coin': 'TONUSDT',
+                            'interval': '15',
                             'model': '15m.keras',
                             'scelar': '15m.gz',
                             'window_size': 3,
+                            'threshold_window': 0.01,
                             'predict_percent': 0.65,
                             'trade': 'long',
                             'numeric': ['open', 'high', 'low', 'close', 'taker_buy_volume'],
                             'comment': 'Обучен на 2 месяцах'
                         },
                         {
+                            'coin': 'TONUSDT',
+                            'interval': '30',
                             'model': '30m.keras',
                             'scelar': '30m.gz',
                             'window_size': 3,
+                            'threshold_window': 0.01,
                             'predict_percent': 0.63,
                             'trade': 'long',
                             'numeric': ['open', 'high', 'low', 'close', 'taker_buy_volume'],
@@ -45,19 +69,17 @@ cnn_model = {
             }
 
 stg_dict = {
-    'ai_cnn':
-            {
                 'stg_name': 'ai_cnn',
                 'name': 'Ai CNN',
                 'desc': 'Стратегия торговли Ai CNN',
                 'amount': '1.0',
                 'deals': 1,
                 'ctg': 'linear',
-                'exch': ''
-                        'cnn_model': cnn_model.
-            }}
+                'exch': '',
+                'cnn_model': cnn_model
+            }
 
-class Strategy_ai_cnn(Api_Trade_Method):
+class Strategy_AI_CNN(Api_Trade_Method):
     symbol: str
     uuid: str
     session: None
@@ -71,7 +93,6 @@ class Strategy_ai_cnn(Api_Trade_Method):
         self.stg_dict = self.getStgDictFromBD()
         config.getTgId(user_id=user_id)
         self.fee = self.getFeeRate(symbol=self.symbol)
-        self.decimal_part = len(str(self.stg_dict['step']).split('.')[1])
 
     async def Start(self):
         # получаем теущую цену +
@@ -81,8 +102,8 @@ class Strategy_ai_cnn(Api_Trade_Method):
         # если происходит покупка снова по этой цене, а старый тейкпрофит еще в базе, удаляется старый тейкпрофит и ставится новый двойной
         if self.CheckStopStartStg():
             self.session = create_session()
-            self.checkTakeProfit()
-            self.predict_dict = await self.checkAiPredict()
+            #self.checkTakeProfit()
+            self.predict_dict = self.checkAiPredict()
             if predict_dict['buy']:
                 await self.tryBuy(lastPrice)
         else:
@@ -207,6 +228,21 @@ class Strategy_ai_cnn(Api_Trade_Method):
         return createTx
 
     def checkAiPredict(self):
+        predict_price = []
+        for key, value in cnn_model.items():
+            if key == self.symbol:
+                for item in value:
+                    if item['interval'] == '1' or item['interval'] == '5':
+                        limit = 2880 % int(item['interval'])
+                    if item['interval'] == '15':
+                        limit = 8640 % int(item['interval'])
+                    if item['interval'] == '30':
+                        limit = 17280 % int(item['interval'])
+                    predict = CNNPredict(model_dict=item,
+                                   klines=self.get_kline(symbol=self.symbol, interval=item['interval'], limit=limit))
+                    predict_price.append(predict.run())
+        print(f'predict list: {predict_price}')
+
 
 
     def checkTakeProfit(self):
@@ -263,8 +299,9 @@ class Strategy_ai_cnn(Api_Trade_Method):
             session.commit()
         return return_dict
 
+
     def returnHelpInfo(self, stg_id: int) -> str:
-        return f"Настройка стратегии Лесенка" + emoji.emojize(":chart_increasing:") \
+        return f"Настройка стратегии AI CNN" + emoji.emojize(":robot:") \
                + "\nВводите команды для настройки стратегии\n" \
                + f"\nдля этой стратегии укажите <b>id={stg_id}</b>\n" \
                + f"\n/stgedit ladder_stg id={stg_id} active true - Выбрать эту стратегию\n" \
@@ -491,3 +528,92 @@ class Strategy_ai_cnn(Api_Trade_Method):
         # plt.show()
 
         return 'Backtest'
+
+class CNNPredict():
+    df_scaled : None
+
+    def __init__(self, model_dict, klines):
+        self.model_dict = model_dict
+        self.path_model = f"ai_cnn/cn_model/{model_dict['coin']}/"
+        self.keras_model = load_model(f"{self.path_model}{model_dict['model']}")
+        self.df = self.load_history_test_data()
+        self.scaler = joblib.load(f"{self.path_model}{model_dict['scelar']}")
+        self.window_size = model_dict['window_size']
+        self.predict_percent = model_dict['predict_percent']
+        self.numeric_features = model_dict['numeric']
+        self.threshold_window = model_dict['threshold_window']
+        self.df = self.klines_to_df(klines)
+
+    def run(self):
+        x_new, close_prices = self.prepare_new_data()
+        new_predictions = self.keras_model.predict(x_new)
+        new_predicted_classes = (new_predictions > self.predict_percent).astype(int)  # ton 0.6
+
+        # Вызов функции отрисовки
+        self.plot_predictions(new_predicted_classes.flatten())
+
+        print("Predicted classes:", len(new_predicted_classes))
+
+        unique, counts = np.unique(new_predicted_classes, return_counts=True)
+        print("Unique predicted classes and their counts:", dict(zip(unique, counts)))
+
+        # Вывод предсказанных классов и соответствующих цен закрытия
+        print("Predicted classes and closing prices:")
+        predict_price = []
+        for predicted_class, close_price in zip(new_predicted_classes.flatten(), close_prices):
+            if predicted_class == 1:
+                predict_price.append({close_price})
+                print(f"Class: {predicted_class}, Close Price: {close_price}")
+        return predict_price
+
+    def prepare_new_data(self):
+        #self.df['pct_change'] = self.df['close'].pct_change(periods=self.window_size)
+        # Предполагается, что new_data уже содержит нужные столбцы и очищен от недостающих значений
+        new_data_scaled = self.scaler.transform(self.df[self.numeric_features])
+        self.df_scaled = pd.DataFrame(new_data_scaled, columns=self.numeric_features)
+        x_new, close_prices = self.create_rolling_windows()
+        return x_new, close_prices
+
+    def create_rolling_windows(self): # with VOLUME
+        x = []
+        #y = []
+        close_prices = []
+        for i in range(len(self.df_scaled) - self.window_size):
+            # Получение цены закрытия на последнем шаге окна
+            close_price = self.df['close'].iloc[i + self.window_size - 1]
+            close_prices.append(close_price)
+            #change = self.df['pct_change'].iloc[i + self.window_size]  # Использование ранее рассчитанного изменения
+            x.append(self.df_scaled[['open', 'high', 'low', 'close', 'taker_buy_volume']].iloc[i:i + self.window_size].values) # , 'volume', 'count', 'taker_buy_volume'
+            # Создание бинарной целевой переменной
+            #y.append(1 if abs(change) >= self.threshold_window else 0)
+        return np.array(x), np.array(close_prices)
+
+    def klines_to_df(self, klines):
+        # Создаем пустой DataFrame
+        df = pd.DataFrame()
+        df = pd.concat([df, klines], ignore_index=True)
+        return df
+
+
+    def plot_predictions(self, predictions):
+        # Создание фигуры и оси
+        plt.figure(figsize=(14, 7))
+        plt.plot(self.df_scaled['close'], label='Close Price', color='blue')  # Рисуем цену закрытия
+
+        # Расчет индексов, на которых были получены предсказания
+        prediction_indexes = np.arange(self.window_size, len(predictions) + self.window_size)
+
+        last_prediction_index = None
+        # Отметка предсказаний модели зелеными метками
+        for i, predicted in enumerate(predictions):
+            if predicted == 1:  # Если модель предсказала движение на 1% или более
+                plt.scatter(prediction_indexes[i], self.df_scaled['close'].iloc[prediction_indexes[i]], color='red',
+                            label='Predicted >1% Change' if i == 0 else "")
+
+        # Добавление легенды и заголовка
+        plt.title('Model Predictions on Price Data')
+        plt.xlabel('Time')
+        plt.ylabel('Close Price')
+        plt.legend()
+        plt.savefig(f"{self.path_model}predictIMG/{self.model_dict['coin']}-{self.model_dict['interval']}-prdct.png")
+        plt.close()
