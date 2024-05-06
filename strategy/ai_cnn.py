@@ -5,8 +5,14 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib
+from sqlalchemy import select, Null, update
+from sqlalchemy.orm import Session
 
+from config import config
+from models import Strategy
 from trade_classes import Api_Trade_Method
+from utils import create_session
+from utils_db import getEngine
 
 matplotlib.use('Agg')
 from tensorflow.keras.models import load_model
@@ -34,12 +40,12 @@ cnn_model = {
                             'interval': '5',
                             'model': '5m.keras',
                             'scelar': '5m.gz',
-                            'window_size': 5,
+                            'window_size': 4,
                             'threshold_window': 0.01,
-                            'predict_percent': 0.7,
+                            'predict_percent': 0.45,
                             'trade': 'long',
-                            'numeric': ['open', 'high', 'low', 'close', 'taker_buy_volume'],
-                            'comment': 'Обучен на месяце'
+                            'numeric': ['open', 'high', 'low', 'close', 'volume'],
+                            'comment': 'Обучен на 0,5 месяце 04.2024'
                     },
                         {
                             'coin': 'TONUSDT',
@@ -76,7 +82,8 @@ stg_dict = {
                 'deals': 1,
                 'ctg': 'linear',
                 'exch': '',
-                'cnn_model': cnn_model
+                'x': 1,
+                'move': 'two',  # up, down, two
             }
 
 class Strategy_AI_CNN(Api_Trade_Method):
@@ -243,8 +250,6 @@ class Strategy_AI_CNN(Api_Trade_Method):
                     predict_price.append(predict.run())
         print(f'predict list: {predict_price}')
 
-
-
     def checkTakeProfit(self):
         self.cleanHistory()
 
@@ -286,7 +291,7 @@ class Strategy_AI_CNN(Api_Trade_Method):
                 if change is not None:
                     query.start = False if query.start else True
                 stg_dict = query.stg_dict
-                if not stg_dict['amount'] or float(step.replace(",", ".")) <= 0.0:
+                if not stg_dict['amount']:
                     return_dict[
                         'answer'] = '<b>Нельзя запустить!</b>\n У вас не настроена сумма сделки' + emoji.emojize(
                         ":backhand_index_pointing_left:") + '\n'
@@ -304,27 +309,24 @@ class Strategy_AI_CNN(Api_Trade_Method):
         return f"Настройка стратегии AI CNN" + emoji.emojize(":robot:") \
                + "\nВводите команды для настройки стратегии\n" \
                + f"\nдля этой стратегии укажите <b>id={stg_id}</b>\n" \
-               + f"\n/stgedit ladder_stg id={stg_id} active true - Выбрать эту стратегию\n" \
-               + f"/stgedit ladder_stg id={stg_id} step 0.5 - шаг в USDT (min 20 pips)\n" \
-               + f"/stgedit ladder_stg id={stg_id} deals 2 - количество сделок на одну цену\n" \
-               + f"/stgedit ladder_stg id={stg_id} ctg spot - spot или linear\n" \
-               + f"/stgedit ladder_stg id={stg_id} x 2 - плечо\n" \
-               + f"/stgedit ladder_stg id={stg_id} fibo true - включить/выключить Фибоначчи true/false\n" \
-               + f"/stgedit ladder_stg id={stg_id} move up - Направление движения покупки up, down, two\n" \
-                 f"/stgedit ladder_stg id={stg_id} amount 100 - сколько крипты за одну сделку\n"
+               + f"\n/stgedit ai_cnn id={stg_id} active true - Выбрать эту стратегию\n" \
+               + f"/stgedit ai_cnn id={stg_id} ctg spot - spot или linear\n" \
+               + f"/stgedit ai_cnn id={stg_id} x 2 - плечо\n" \
+               + f"/stgedit ai_cnn id={stg_id} move up - Направление движения покупки up, down, two\n" \
+                 f"/stgedit ai_cnn id={stg_id} amount 100 - сколько крипты за одну сделку\n"
 
     def getCommandValue(self, key: str, value: str) -> str:
         with closing(Session(getEngine())) as session:
             query = session.query(Strategy).filter_by(id=self.stg_id).one()
-            query.stg_name = 'ladder_stg'
+            query.stg_name = 'ai_cnn'
             if not query:
                 result = f'Не создана стратегия торговли\n'
             else:
                 if key.lower() == 'active':
                     if value:
-                        result = f'<b>Стратегия Лесенка ' + emoji.emojize(
-                            ":chart_increasing:") + f' активирована для {query.symbol} ({self.stg_id})</b>\nДля ее работы надо указать все настройки и после этого запустить.\n\n'
-                        query.stg_dict = stg_dict['ladder_stg']
+                        result = f'<b>Стратегия AI CNN ' + emoji.emojize(
+                            ":robot:") + f' активирована для {query.symbol} ({self.stg_id})</b>\nДля ее работы надо указать все настройки и после этого запустить.\n\n'
+                        query.stg_dict = stg_dict
                         result += 'Вы обновили статегию, поэтому настройки выставлены <u>по умолчанию</u>, не забудьте их изменить\n\n'
 
                     else:
@@ -332,19 +334,6 @@ class Strategy_AI_CNN(Api_Trade_Method):
                         result = '<b>Стратегия отключена</b>'
                     session.commit()
                 if query.stg_dict:
-                    if key == 'step':
-                        if value:
-                            try:
-                                value = float(value)
-                                temp_dict = {}
-                                temp_dict = query.stg_dict
-                                temp_dict['step'] = value
-                                stmt = update(Strategy).where(Strategy.id == self.stg_id).values(stg_dict=temp_dict)
-                                session.execute(stmt)
-                                session.commit()
-                                result = f'Вы указали шаг - <b>{value} USDT</b>\n\n'
-                            except ValueError:
-                                result = f'Вы указали не правильный шаг, пример: 0.5\n\n'
 
                     if key == 'deals':
                         if value:
@@ -371,20 +360,6 @@ class Strategy_AI_CNN(Api_Trade_Method):
                         else:
                             result = f'Вы указали не правильную категорию торговли, можно только spot или linear (бессрочная)\n\n'
 
-                    if key == 'x':
-                        if value:
-                            try:
-                                x = int(value)
-                                temp_dict = {}
-                                temp_dict = query.stg_dict
-                                temp_dict['x'] = value
-                                stmt = update(Strategy).where(Strategy.id == self.stg_id).values(stg_dict=temp_dict)
-                                session.execute(stmt)
-                                session.commit()
-                                result = f'Вы указали плечо <b>{value}</b> для торговли\n\n'
-                            except ValueError:
-                                result = f'Вы указали не правильное плечо для торговли\n\n'
-
                     if key == 'move':
                         if value.lower() == 'up' or value.lower() == 'down' or value.lower() == 'two':
                             temp_dict = query.stg_dict
@@ -396,20 +371,8 @@ class Strategy_AI_CNN(Api_Trade_Method):
                         else:
                             result = f'Вы указали не допустимое движение для торговли\n\n'
 
-                    if key == 'fibo':
-                        if value.lower() == 'false' or value.lower() == 'true':
-                            temp_dict = query.stg_dict
-                            temp_dict['fibo'] = bool(value)
-                            stmt = update(Strategy).where(Strategy.id == self.stg_id).values(stg_dict=temp_dict)
-                            session.execute(stmt)
-                            session.commit()
-                            result = f'Вы указали значение <b>{value}</b> для торговли по Фиббоначи\n\n'
-                        else:
-                            result = f'Вы указали не правильное значение для торговли Фиббоначи\n\n'
-
                     if key == 'amount':
                         if value:
-                            query.stg_name = 'ladder_stg'
                             try:
                                 value = float(value)
                                 temp_dict = {}
@@ -430,10 +393,19 @@ class Strategy_AI_CNN(Api_Trade_Method):
     # возврщает описание для телеги бота
     def getDescriptionStg(self) -> str:
         try:
-            answer = f"<b>Текущие настройки</b>\nШаг цены USDT: {self.stg_dict['step']}\nСумма сделки: {self.stg_dict['amount']}" \
-                     f"\nКоличество сделок на одну цену: {self.stg_dict['deals']}\nКатегория: {self.stg_dict['ctg']}\nПлечо: {self.stg_dict['x']}" \
-                     f"\nФибоначчи: {self.stg_dict['fibo']}\nПокупка по движению: {self.stg_dict['move']}" \
-                     f"\n\n<b>Описание</b> {self.stg_dict['desc']}\n"
+            answer = f'<b>{self.symbol}</b>:\n'
+            answer += f'Торговля запушена ' + emoji.emojize(
+                ":check_mark_button:") + '\n' if query.start else f'Торговля остановлена' + emoji.emojize(
+                ":stop_sign:") + '\n'
+
+
+            if self.stg_dict is None:
+                answer += f'\n<b>Стратегия торговли не установлена</b>\n'
+            else:
+                answer += f"\n<b>Описание</b> {self.stg_dict['desc']}\n\n"\
+                         f"<b>Текущие настройки</b>\nСумма сделки: {self.stg_dict['amount']}" \
+                         f"\nКоличество сделок на одну цену: {self.stg_dict['deals']}\nКатегория: {self.stg_dict['ctg']}\nПлечо: {self.stg_dict['x']}" \
+                         f"\nПокупка по движению: {self.stg_dict['move']}"
             return answer
         except KeyError:
             return f"<b>Необходимо пересоздать стратегию, активировав ее заново</b>\n"
@@ -534,9 +506,9 @@ class CNNPredict():
 
     def __init__(self, model_dict, klines):
         self.model_dict = model_dict
-        self.path_model = f"ai_cnn/cn_model/{model_dict['coin']}/"
+        self.path_model = f"strategy/ai_cnn/cnn_model/{model_dict['coin']}/"
         self.keras_model = load_model(f"{self.path_model}{model_dict['model']}")
-        self.df = self.load_history_test_data()
+        self.df = self.klines_to_df(klines=klines)
         self.scaler = joblib.load(f"{self.path_model}{model_dict['scelar']}")
         self.window_size = model_dict['window_size']
         self.predict_percent = model_dict['predict_percent']
@@ -589,7 +561,8 @@ class CNNPredict():
         return np.array(x), np.array(close_prices)
 
     def klines_to_df(self, klines):
-        # Создаем пустой DataFrame
+        print(f'klines {klines}')
+        klines['result']['list']
         df = pd.DataFrame()
         df = pd.concat([df, klines], ignore_index=True)
         return df

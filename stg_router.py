@@ -68,7 +68,7 @@ def splitCommandStg(stgedit: str):
     stgObj = getStgObjFromClass(stg_id=stg_id, stg_name=stg)
     return stgObj.getCommandValue(key=key, value=value)
 
-# получаем класс и отдаем объект на основе этого класса
+
 def getStgObjFromClass(stg_id: int = None, stg_name: str = None) -> classmethod:
     session = create_session()
     query = session.query(Strategy).filter_by(id=stg_id).one()
@@ -79,7 +79,7 @@ def getStgObjFromClass(stg_id: int = None, stg_name: str = None) -> classmethod:
             session.close()
             return createStgObj
         if query.stg_name == 'ai_cnn':
-            createStgObj = Strategy_ai_cnn(stg_id=stg_id, user_id=query.user.id)
+            createStgObj = Strategy_AI_CNN(stg_id=stg_id, user_id=query.user.id)
             session.close()
             return createStgObj
     if stg_name:

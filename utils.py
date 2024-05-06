@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload, Session, sessionmaker
 from models import User, Api, Strategy
 
 from config import config, secret_config
-from stg_router import getStgObjFromClass
+
 from utils_db import getEngine
 
 def create_session():
@@ -128,20 +128,3 @@ def CheckExistCoin(user_id):
             emj = emoji.emojize(":check_mark_button:") if key.start else emoji.emojize(":stop_sign:")
             ddict['answer'] = ddict['answer'] + f'{key.symbol} {emj}\n'
     return ddict
-
-def getStgData(stg_id):
-    with Session(getEngine()) as session:
-        query = session.query(Strategy).filter_by(id=stg_id).one()
-        ddict = {'answer': f'<b>{query.symbol}</b>:\n'}
-        if not query:
-            ddict['answer'] = ddict['answer'] + f'Нет\n'
-        else:
-            start_txt = f'Торговля запушена '+ emoji.emojize(":check_mark_button:")+'\n' if query.start else f'Торговля остановлена' + emoji.emojize(":stop_sign:")+'\n'
-            ddict['answer'] = ddict['answer'] + start_txt
-
-            if query.stg_dict is None:
-                ddict['answer'] = ddict['answer'] + f'Стратегия торговли не установлена\n'
-            else:
-                stgObj = getStgObjFromClass(stg_id=stg_id)
-                ddict['answer'] = ddict['answer'] + stgObj.getDescriptionStg()
-    return ddict['answer']

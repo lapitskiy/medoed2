@@ -22,7 +22,7 @@ from cl_thread import StartTrade
 # print(f"query {query.user}")
 
 # Включаем логирование, чтобы не пропустить важные сообщения
-from utils import dbAccCheck, CheckExistCoin, getStgData, create_session, AddCoin, CheckApiEx, AddApiByBit, DelApiByBit
+from utils import dbAccCheck, CheckExistCoin, create_session, AddCoin, CheckApiEx, AddApiByBit, DelApiByBit
 
 logging.basicConfig(level=logging.INFO)
 # Объект бота
@@ -121,7 +121,9 @@ async def callback_addcoin(query: CallbackQuery, callback_data: MyCallback):
 # меню выбранной монеты!
 @dp.callback_query(TradeCallback.filter(F.foo == 'stg'))
 async def callback_trade(query: CallbackQuery, callback_data: TradeCallback):
-    answer = getStgData(stg_id=callback_data.id)
+    #answer = getStgData(stg_id=callback_data.id)
+    stgObj = getStgObjFromClass(stg_id=callback_data.id)
+    answer = stgObj.getDescriptionStg()
     await query.message.edit_text(f"{answer}", reply_markup=stg_keybord(stg_id=callback_data.id))
 
 ''' Меню конкретной монеты, запуск и выбор стратегии '''
@@ -131,7 +133,7 @@ async def callback_edit_stg(query: CallbackQuery, callback_data: EditStgCallback
     if callback_data.action == 'start':
         stgObj = getStgObjFromClass(stg_id=callback_data.id)
         if stgObj:
-            answer = stgObj.StopStartStg(change=True)
+            answer = stgObj.CheckStopStartStg(change=True)
         else:
             answer = {'answer':'Создайте сначала <u>стратегию</u> для запуска!\n\n'}
     answer['answer'] = answer['answer'] + getStgData(stg_id=callback_data.id)
