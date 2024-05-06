@@ -28,12 +28,12 @@ cnn_model = {
                             'interval': '1',
                             'model': '1m.keras',
                             'scelar': '1m.gz',
-                            'window_size': 10,
+                            'window_size': 5,
                             'threshold_window': 0.01,
-                            'predict_percent': 0.63,
+                            'predict_percent': 0.48,
                             'trade': 'long',
-                            'numeric': ['open', 'high', 'low', 'close', 'taker_buy_volume'],
-                            'comment': 'Обучен на месяце'
+                            'numeric': ['open', 'high', 'low', 'close', 'volume'],
+                            'comment': 'Обучен на 1 месяце 04.2024'
                     },
                     {
                             'coin': 'TONUSDT',
@@ -54,10 +54,10 @@ cnn_model = {
                             'scelar': '15m.gz',
                             'window_size': 3,
                             'threshold_window': 0.01,
-                            'predict_percent': 0.65,
+                            'predict_percent': 0.56,
                             'trade': 'long',
-                            'numeric': ['open', 'high', 'low', 'close', 'taker_buy_volume'],
-                            'comment': 'Обучен на 2 месяцах'
+                            'numeric': ['open', 'high', 'low', 'close', 'volume'],
+                            'comment': 'Обучен на 2 месяцах 04.2024 и 03.2024'
                         },
                         {
                             'coin': 'TONUSDT',
@@ -66,10 +66,10 @@ cnn_model = {
                             'scelar': '30m.gz',
                             'window_size': 3,
                             'threshold_window': 0.01,
-                            'predict_percent': 0.63,
+                            'predict_percent': 0.6,
                             'trade': 'long',
-                            'numeric': ['open', 'high', 'low', 'close', 'taker_buy_volume'],
-                            'comment': 'Обучен на 2 месяцах'
+                            'numeric': ['open', 'high', 'low', 'close', 'volume'],
+                            'comment': 'Обучен на 2 месяцах 04.2024 и 03.2024'
                         },
                     ]
             }
