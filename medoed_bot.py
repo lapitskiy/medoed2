@@ -60,6 +60,7 @@ async def async_infinite_loop():
 async def start_command(message: Message, command: CommandObject):
         dbAccCheck(message.from_user.id)
         config.chat_id = message.from_user.id
+
         #await message.delete()
         await message.answer(f"Привет, <b>{message.from_user.username}</b>!",
                              reply_markup=main_keybord())
@@ -122,21 +123,27 @@ async def callback_addcoin(query: CallbackQuery, callback_data: MyCallback):
 @dp.callback_query(TradeCallback.filter(F.foo == 'stg'))
 async def callback_trade(query: CallbackQuery, callback_data: TradeCallback):
     #answer = getStgData(stg_id=callback_data.id)
+    print(f'{callback_data.id}')
     stgObj = getStgObjFromClass(stg_id=callback_data.id)
-    answer = stgObj.getDescriptionStg()
+    if stgObj is None:
+        answer = 'Стратегия для пары не добавлена'
+    else:
+        answer = stgObj.getDescriptionStg()
     await query.message.edit_text(f"{answer}", reply_markup=stg_keybord(stg_id=callback_data.id))
 
 ''' Меню конкретной монеты, запуск и выбор стратегии '''
 @dp.callback_query(EditStgCallback.filter(F.foo == 'stg_edit'))
 async def callback_edit_stg(query: CallbackQuery, callback_data: EditStgCallback):
     answer = {'answer':''}
-    if callback_data.action == 'start':
-        stgObj = getStgObjFromClass(stg_id=callback_data.id)
-        if stgObj:
+    stgObj = getStgObjFromClass(stg_id=callback_data.id)
+    if stgObj:
+        if callback_data.action == 'start':
             answer = stgObj.CheckStopStartStg(change=True)
+            answer['answer'] = stgObj.getDescriptionStg()
         else:
-            answer = {'answer':'Создайте сначала <u>стратегию</u> для запуска!\n\n'}
-    answer['answer'] = answer['answer'] + getStgData(stg_id=callback_data.id)
+            answer['answer'] = stgObj.getDescriptionStg()
+    else:
+        answer = {'answer': 'Создайте сначала <u>стратегию</u> для запуска!\n\n'}
     await query.message.edit_text(f"\n{answer['answer']}", reply_markup=stg_keybord(stg_id=callback_data.id))
 
 @dp.callback_query(ChooseStgCallback.filter(F.foo == 'stg_choose'))

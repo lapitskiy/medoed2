@@ -90,12 +90,12 @@ stg_dict = {
 class Strategy_AI_CNN(Api_Trade_Method):
     symbol: str
     uuid: str
-    session: None
     predict_dict: None
 
     def __init__(self, stg_id, user_id):
         self.stg_id = stg_id
         self.api_session = self.makeSession(stg_id=stg_id)
+        self.session = create_session()
         self.user_id = user_id
         self.stg_name = 'ai_cnn'
         self.stg_dict = self.getStgDictFromBD()
@@ -109,7 +109,6 @@ class Strategy_AI_CNN(Api_Trade_Method):
         # запоминается время покупки в базу и стоп по этой покупке
         # если происходит покупка снова по этой цене, а старый тейкпрофит еще в базе, удаляется старый тейкпрофит и ставится новый двойной
         if self.CheckStopStartStg():
-            self.session = create_session()
             #self.checkTakeProfit()
             self.predict_dict = self.checkAiPredict()
             if predict_dict['buy']:
@@ -399,6 +398,7 @@ class Strategy_AI_CNN(Api_Trade_Method):
     # возврщает описание для телеги бота
     def getDescriptionStg(self) -> str:
         try:
+            query = self.session.query(Strategy).filter_by(id=self.stg_id).one()
             answer = f'<b>{self.symbol}</b>:\n'
             answer += f'Торговля запушена ' + emoji.emojize(
                 ":check_mark_button:") + '\n' if query.start else f'Торговля остановлена' + emoji.emojize(
@@ -420,9 +420,9 @@ class Strategy_AI_CNN(Api_Trade_Method):
     def getStgDictFromBD(self) -> dict:
         with closing(Session(getEngine())) as session:
             query = session.query(Strategy).filter_by(id=self.stg_id).one()
+            self.symbol = query.symbol
             if not query.stg_dict:
                 return None
-            self.symbol = query.symbol
         return query.stg_dict
 
     # возврщает описание для телеги бота

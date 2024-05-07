@@ -68,7 +68,6 @@ def splitCommandStg(stgedit: str):
     stgObj = getStgObjFromClass(stg_id=stg_id, stg_name=stg)
     return stgObj.getCommandValue(key=key, value=value)
 
-
 def getStgObjFromClass(stg_id: int = None, stg_name: str = None) -> classmethod:
     session = create_session()
     query = session.query(Strategy).filter_by(id=stg_id).one()
