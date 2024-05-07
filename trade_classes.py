@@ -18,6 +18,9 @@ from utils_db import getEngine
 from models import Strategy, TradeHistory
 from config import config
 
+import datetime
+import time
+
 
 def create_session():
     Session = sessionmaker(getEngine())
@@ -132,15 +135,55 @@ class Api_Trade_Method():
         #    print(f"\nLastTakeProfitOrder exception: {api_err.args}\n")
         #    return {'error': api_err.args}
 
-    def get_kline(self, symbol: str, interval:str, limit: int):
-        #try:
-        kline = self.api_session.get_kline(
-            category="linear",
-            symbol=symbol,
-            interval=interval,
-            limit=limit
-            )
-        return kline
+    def get_kline(self, symbol: str, interval: str, limit: int):
+        if limit>1000:
+            max_candles_per_request = 1000
+
+            # Вычисляем начальный и конечный timestamp
+            end_datetime = datetime.datetime.now()
+            start_datetime = end_datetime - datetime.timedelta(minutes=limit*int(interval))
+
+            # Начальные значения для цикла
+            start_timestamp = int(time.mktime(start_datetime.timetuple()) * 1000)
+            end_timestamp = int(time.mktime(end_datetime.timetuple()) * 1000)
+            current_start = start_timestamp
+
+            # Список для хранения всех полученных свечей
+            all_candles = []
+
+            while current_start < end_timestamp:
+                current_end = current_start + max_candles_per_request * 60 * 1000  # +1000 минут в миллисекундах
+                if current_end > end_timestamp:
+                    current_end = end_timestamp
+
+                # Запрос к API
+                kline = self.api_session.get_kline(
+                    category="linear",
+                    symbol=symbol,
+                    interval=interval,
+                    start=current_start,
+                    end=current_end,
+                    limit=max_candles_per_request
+                )
+
+                # Добавляем полученные данные в список
+                all_candles.extend(kline['result']['list'])
+
+                # Перемещаем начальный timestamp на следующий интервал
+                current_start = current_end + 60 * 1000  # Переходим к следующей минуте
+
+
+
+
+        else:
+            all_candles = self.api_session.get_kline(
+                category="linear",
+                symbol=symbol,
+                interval=interval,
+                limit=limit
+                )
+        print(f'len kline {len(all_candles)}')
+        return all_candles
         #except Exception as api_err:
         #    print(f"\nLastTakeProfitOrder exception: {api_err.args}\n")
         #    return {'error': api_err.args}

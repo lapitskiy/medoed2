@@ -1,3 +1,4 @@
+import os
 from contextlib import closing
 from datetime import datetime, timedelta
 
@@ -28,9 +29,9 @@ cnn_model = {
                             'interval': '1',
                             'model': '1m.keras',
                             'scelar': '1m.gz',
-                            'window_size': 5,
+                            'window_size': 10,
                             'threshold_window': 0.01,
-                            'predict_percent': 0.48,
+                            'predict_percent': 0.45,
                             'trade': 'long',
                             'numeric': ['open', 'high', 'low', 'close', 'volume'],
                             'comment': 'Обучен на 1 месяце 04.2024'
@@ -101,7 +102,7 @@ class Strategy_AI_CNN(Api_Trade_Method):
         config.getTgId(user_id=user_id)
         self.fee = self.getFeeRate(symbol=self.symbol)
 
-    async def Start(self):
+    def Start(self):
         # получаем теущую цену +
         # если цена равна круглой цене в шаге который у нас указан, происходит покупка
         # тут же ставиться стоп на цену шага выше
@@ -112,12 +113,12 @@ class Strategy_AI_CNN(Api_Trade_Method):
             #self.checkTakeProfit()
             self.predict_dict = self.checkAiPredict()
             if predict_dict['buy']:
-                await self.tryBuy(lastPrice)
+                self.tryBuy(lastPrice)
         else:
             print(f"answer {ddict['answer']}")
             # simple_message_from_threading(answer=ddict['answer'])
 
-    async def tryBuy(self, lastPrice):
+    def tryBuy(self, lastPrice):
         # self.uuid = str(uuid.uuid4())
         self.stg_dict = self.getStgDictFromBD()
         tp = round(lastPrice + float(self.stg_dict['step']), self.decimal_part)
@@ -142,7 +143,7 @@ class Strategy_AI_CNN(Api_Trade_Method):
                     else:
                         tx = self.BuyMarket(self.symbol, self.stg_dict['amount'])
                     if 'error' not in tx:
-                        order_info = await self.OrderHistory(tx['result']['orderId'])
+                        order_info = self.OrderHistory(tx['result']['orderId'])
                         # print(f'order_info 1 {order_info}')
                         buy_price = order_info['result']['list'][0]['cumExecValue']
                         tx['result']['price'] = buy_price
@@ -181,7 +182,7 @@ class Strategy_AI_CNN(Api_Trade_Method):
                 f"else price COUNT - {priceCountQ.count()} | lastprice = {lastPrice}  |  | deals = {self.stg_dict['deals']}\n")
             if 'error' not in tx:
                 # print(f"orderid {tx}\n")
-                order_info = await self.OrderHistory(tx['result']['orderId'])
+                order_info = self.OrderHistory(tx['result']['orderId'])
                 # print(f'order_info 2 {order_info}\n')
                 buy_price = order_info['result']['list'][0]['cumExecValue']
                 tx['result']['price'] = buy_price
@@ -239,14 +240,19 @@ class Strategy_AI_CNN(Api_Trade_Method):
         for key, value in cnn_model.items():
             if key == self.symbol:
                 for item in value:
-                    if item['interval'] == '1' or item['interval'] == '5':
-                        limit = 2880 % int(item['interval'])
+                    limit = 0
+                    if item['interval'] == '1':
+                        limit = 4320
+                    if item['interval'] == '5':
+                        limit = 864
                     if item['interval'] == '15':
-                        limit = 8640 % int(item['interval'])
+                        limit = 576
                     if item['interval'] == '30':
-                        limit = 17280 % int(item['interval'])
+                        limit = 576
+                    klines =self.get_kline(symbol=self.symbol, interval=item['interval'], limit=limit)
+                    #print(f'klines: {klines}')
                     predict = CNNPredict(model_dict=item,
-                                   klines=self.get_kline(symbol=self.symbol, interval=item['interval'], limit=limit))
+                                   klines=klines)
                     predict_price.append(predict.run())
         print(f'predict list: {predict_price}')
 
@@ -506,15 +512,23 @@ class CNNPredict():
 
     def __init__(self, model_dict, klines):
         self.model_dict = model_dict
-        self.path_model = f"strategy/ai_cnn/cnn_model/{model_dict['coin']}/"
-        self.keras_model = load_model(f"{self.path_model}{model_dict['model']}")
-        self.df = self.klines_to_df(klines=klines)
-        self.scaler = joblib.load(f"{self.path_model}{model_dict['scelar']}")
+        self.path = f"strategy/ai_cnn/cnn_model/{model_dict['coin']}/"
+        #self.path_model = os.path.join(self.path, model_dict['model'])
+        print(f'self.path_model {self.path}')
+        print(f"model {model_dict['model']}")
+        if os.path.exists(self.path):
+            print("Путь существует")
+        else:
+            print("Путь не существует")
+
+
+        self.keras_model = load_model(f"{self.path}{model_dict['model']}")
+        self.scaler = joblib.load(f"{self.path}{model_dict['scelar']}")
         self.window_size = model_dict['window_size']
         self.predict_percent = model_dict['predict_percent']
         self.numeric_features = model_dict['numeric']
         self.threshold_window = model_dict['threshold_window']
-        self.df = self.klines_to_df(klines)
+        self.df = self.klines_to_df(klines=klines)
 
     def run(self):
         x_new, close_prices = self.prepare_new_data()
@@ -536,6 +550,7 @@ class CNNPredict():
             if predicted_class == 1:
                 predict_price.append({close_price})
                 print(f"Class: {predicted_class}, Close Price: {close_price}")
+                break
         return predict_price
 
     def prepare_new_data(self):
@@ -555,16 +570,18 @@ class CNNPredict():
             close_price = self.df['close'].iloc[i + self.window_size - 1]
             close_prices.append(close_price)
             #change = self.df['pct_change'].iloc[i + self.window_size]  # Использование ранее рассчитанного изменения
-            x.append(self.df_scaled[['open', 'high', 'low', 'close', 'taker_buy_volume']].iloc[i:i + self.window_size].values) # , 'volume', 'count', 'taker_buy_volume'
+            x.append(self.df_scaled[['open', 'high', 'low', 'close', 'volume']].iloc[i:i + self.window_size].values) # , 'volume', 'count', 'taker_buy_volume'
             # Создание бинарной целевой переменной
             #y.append(1 if abs(change) >= self.threshold_window else 0)
         return np.array(x), np.array(close_prices)
 
     def klines_to_df(self, klines):
-        print(f'klines {klines}')
-        klines['result']['list']
-        df = pd.DataFrame()
-        df = pd.concat([df, klines], ignore_index=True)
+        df = pd.DataFrame(klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'value'])
+        df.drop('timestamp', axis=1, inplace=True)
+        df.drop('value', axis=1, inplace=True)
+        float_columns = ['open', 'high', 'low', 'close', 'volume']
+        df[float_columns] = df[float_columns].astype(float)
+        df['pct_change'] = df['close'].pct_change(periods=self.window_size)
         return df
 
 
@@ -588,5 +605,5 @@ class CNNPredict():
         plt.xlabel('Time')
         plt.ylabel('Close Price')
         plt.legend()
-        plt.savefig(f"{self.path_model}predictIMG/{self.model_dict['coin']}-{self.model_dict['interval']}-prdct.png")
+        plt.savefig(f"{self.path}predictIMG/{self.model_dict['coin']}-{self.model_dict['interval']}-prdct.png")
         plt.close()
