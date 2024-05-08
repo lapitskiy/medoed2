@@ -46,7 +46,7 @@ cnn_model = {
                             'predict_percent': 0.45,
                             'trade': 'long',
                             'numeric': ['open', 'high', 'low', 'close', 'volume'],
-                            'comment': 'Обучен на 0,5 месяце 04.2024'
+                            'comment': 'Обучен на 2 месяце 04.2024 и 03.2024'
                     },
                         {
                             'coin': 'TONUSDT',
@@ -55,7 +55,7 @@ cnn_model = {
                             'scelar': '15m.gz',
                             'window_size': 3,
                             'threshold_window': 0.01,
-                            'predict_percent': 0.56,
+                            'predict_percent': 0.61,
                             'trade': 'long',
                             'numeric': ['open', 'high', 'low', 'close', 'volume'],
                             'comment': 'Обучен на 2 месяцах 04.2024 и 03.2024'
@@ -66,8 +66,8 @@ cnn_model = {
                             'model': '30m.keras',
                             'scelar': '30m.gz',
                             'window_size': 3,
-                            'threshold_window': 0.01,
-                            'predict_percent': 0.6,
+                            'threshold_window': 0.02,
+                            'predict_percent': 0.8,
                             'trade': 'long',
                             'numeric': ['open', 'high', 'low', 'close', 'volume'],
                             'comment': 'Обучен на 2 месяцах 04.2024 и 03.2024'
@@ -115,7 +115,6 @@ class Strategy_AI_CNN(Api_Trade_Method):
                 self.tryBuy(lastPrice)
         else:
             print(f"answer {ddict['answer']}")
-            # simple_message_from_threading(answer=ddict['answer'])
 
     def tryBuy(self, lastPrice):
         # self.uuid = str(uuid.uuid4())
@@ -243,17 +242,18 @@ class Strategy_AI_CNN(Api_Trade_Method):
                     if item['interval'] == '1':
                         limit = 4320
                     if item['interval'] == '5':
-                        limit = 864
+                        limit = 2000
                     if item['interval'] == '15':
-                        limit = 576
+                        limit = 1500
                     if item['interval'] == '30':
-                        limit = 576
+                        limit = 1500
                     klines =self.get_kline(symbol=self.symbol, interval=item['interval'], limit=limit)
                     #print(f'klines: {klines}')
                     predict = CNNPredict(model_dict=item,
                                    klines=klines)
                     predict_price.append(predict.run())
         print(f'predict list: {predict_price}')
+        exit()
 
     def checkTakeProfit(self):
         self.cleanHistory()
@@ -599,7 +599,6 @@ class CNNPredict():
             if predicted == 1:  # Если модель предсказала движение на 1% или более
                 plt.scatter(prediction_indexes[i], self.df_scaled['close'].iloc[prediction_indexes[i]], color='red',
                             label='Predicted >1% Change' if i == 0 else "")
-
         # Добавление легенды и заголовка
         plt.title('Model Predictions on Price Data')
         plt.xlabel('Time')
