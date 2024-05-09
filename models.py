@@ -65,3 +65,4 @@ class TradeHistory(Base):
     stg: Mapped['Strategy'] = relationship(back_populates="tx")
     stg_id: Mapped[int] = mapped_column(ForeignKey("strategy.id"))
 
+

@@ -66,8 +66,8 @@ cnn_model = {
                             'model': '30m.keras',
                             'scelar': '30m.gz',
                             'window_size': 3,
-                            'threshold_window': 0.02,
-                            'predict_percent': 0.8,
+                            'threshold_window': 0.03,
+                            'predict_percent': 0.5,
                             'trade': 'long',
                             'numeric': ['open', 'high', 'low', 'close', 'volume'],
                             'comment': 'Обучен на 2 месяцах 04.2024 и 03.2024'
@@ -84,6 +84,7 @@ stg_dict = {
                 'ctg': 'linear',
                 'exch': '',
                 'x': 1,
+                'decimal_part': 2,
                 'move': 'two',  # up, down, two
             }
 
@@ -111,15 +112,19 @@ class Strategy_AI_CNN(Api_Trade_Method):
         if self.CheckStopStartStg():
             #self.checkTakeProfit()
             self.predict_dict = self.checkAiPredict()
-            if predict_dict['buy']:
-                self.tryBuy(lastPrice)
+            current_lastprice_list = self.check_price(self.predict_dict['predict'])
+            if self.predict_dict['buy'] and current_lastprice_list:
+                print(f'current_lastprice_list {current_lastprice_list}')
+                self.tryBuy(current_lastprice_list)
         else:
             print(f"answer {ddict['answer']}")
 
-    def tryBuy(self, lastPrice):
-        # self.uuid = str(uuid.uuid4())
-        self.stg_dict = self.getStgDictFromBD()
-        tp = round(lastPrice + float(self.stg_dict['step']), self.decimal_part)
+    def tryBuy(self, current_lastprice_list):
+        print(f'покупаем')
+        # - тикер берет текущую цену
+        # - если timestamp есть в истории покупок в диапазоне 0.5% от текущей цены и времени, тогда не совершаем сделку
+        rounded_data = [{**current_lastprice_list, 'close': round(current_lastprice_list['close'], self.stg_dict['decimal_part'])} for current_lastprice_list in data]
+        print(rounded_data)
         tradeQ = self.session.query(TradeHistory).order_by(TradeHistory.id.desc())
         priceCountQ = self.session.query(TradeHistory).filter_by(price=str(lastPrice), filled=False)
         if priceCountQ.first():
@@ -216,6 +221,21 @@ class Strategy_AI_CNN(Api_Trade_Method):
         # - если это вторая покупка по цене, отменяем первый стоп и и ставим новый умноженный на 2
         self.session.close()
 
+    def check_price(self, last_price_dict):
+        # Получаем текущий timestamp
+        current_time = datetime.utcnow()
+        current_last_price_predict = []
+        for item in last_price_dict:
+            # Преобразование timestamp из словаря в объект datetime
+            record_time = datetime.utcfromtimestamp(int(item['timestamp']) / 1000)
+            # Разница времени между текущим моментом и timestamp в словаре
+            time_difference = current_time - record_time
+            # Проверяем, прошло ли менее 60 секунд
+            time_interval = 60 * int(item['interval']) * 2
+            if time_difference.total_seconds() <= time_interval:
+                current_last_price_predict.append(item['close'])
+        return current_last_price_predict
+
     def createTX(self, tx: dict, tp: dict):
         # print(f"tx {tx['result']}")
         # print(f"tp {tp['result']}")
@@ -235,6 +255,7 @@ class Strategy_AI_CNN(Api_Trade_Method):
 
     def checkAiPredict(self):
         predict_price = []
+        result = {}
         for key, value in cnn_model.items():
             if key == self.symbol:
                 for item in value:
@@ -252,8 +273,10 @@ class Strategy_AI_CNN(Api_Trade_Method):
                     predict = CNNPredict(model_dict=item,
                                    klines=klines)
                     predict_price.append(predict.run())
-        print(f'predict list: {predict_price}')
-        exit()
+                    result['buy'] = True
+                    result['predict'] = predict_price
+        print(f'predict list tyt: {predict_price}')
+        return result
 
     def checkTakeProfit(self):
         self.cleanHistory()
@@ -548,10 +571,9 @@ class CNNPredict():
         predict_price = []
         for predicted_class, close_price in zip(new_predicted_classes.flatten(), close_prices):
             if predicted_class == 1:
-                predict_price.append({close_price})
+                predict_price.append(close_price)
                 print(f"Class: {predicted_class}, Close Price: {close_price}")
-                break
-        return predict_price
+        return predict_price[-1]
 
     def prepare_new_data(self):
         #self.df['pct_change'] = self.df['close'].pct_change(periods=self.window_size)
@@ -565,10 +587,16 @@ class CNNPredict():
         x = []
         #y = []
         close_prices = []
+        timestamp = []
         for i in range(len(self.df_scaled) - self.window_size):
             # Получение цены закрытия на последнем шаге окна
-            close_price = self.df['close'].iloc[i + self.window_size - 1]
-            close_prices.append(close_price)
+            close_dict = {
+                'interval': self.model_dict['interval'],
+                'timestamp': self.df['timestamp'].iloc[i + self.window_size - 1],
+                # Получение соответствующего timestamp
+                'close': self.df['close'].iloc[i + self.window_size - 1]  # Получение цены закрытия
+            }
+            close_prices.append(close_dict)
             #change = self.df['pct_change'].iloc[i + self.window_size]  # Использование ранее рассчитанного изменения
             x.append(self.df_scaled[['open', 'high', 'low', 'close', 'volume']].iloc[i:i + self.window_size].values) # , 'volume', 'count', 'taker_buy_volume'
             # Создание бинарной целевой переменной
@@ -577,7 +605,6 @@ class CNNPredict():
 
     def klines_to_df(self, klines):
         df = pd.DataFrame(klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'value'])
-        df.drop('timestamp', axis=1, inplace=True)
         df.drop('value', axis=1, inplace=True)
         float_columns = ['open', 'high', 'low', 'close', 'volume']
         df[float_columns] = df[float_columns].astype(float)
