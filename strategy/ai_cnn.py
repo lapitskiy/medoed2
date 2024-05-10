@@ -10,7 +10,7 @@ from sqlalchemy import select, Null, update
 from sqlalchemy.orm import Session
 
 from config import config
-from models import Strategy
+from models import Strategy, TradeHistory
 from trade_classes import Api_Trade_Method
 from utils import create_session
 from utils_db import getEngine
@@ -20,6 +20,7 @@ from tensorflow.keras.models import load_model
 import joblib
 
 import emoji #https://carpedm20.github.io/emoji/
+# https://bybit-exchange.github.io/docs/v5/order/create-order
 
 cnn_model = {
         'TONUSDT':
@@ -31,7 +32,25 @@ cnn_model = {
                             'scelar': '1m.gz',
                             'window_size': 10,
                             'threshold_window': 0.01,
-                            'predict_percent': 0.45,
+                            'predict_percent': 0.5,
+                            'trade': 'long',
+                            'numeric': ['open', 'high', 'low', 'close', 'volume'],
+                            'comment': 'Обучен на 1 месяце 04.2024'
+                    },
+                    ]
+            }
+
+cnn_model_test = {
+        'TONUSDT':
+                    [
+                    {
+                            'coin': 'TONUSDT',
+                            'interval': '1',
+                            'model': '1m.keras',
+                            'scelar': '1m.gz',
+                            'window_size': 10,
+                            'threshold_window': 0.01,
+                            'predict_percent': 0.1,
                             'trade': 'long',
                             'numeric': ['open', 'high', 'low', 'close', 'volume'],
                             'comment': 'Обучен на 1 месяце 04.2024'
@@ -43,7 +62,7 @@ cnn_model = {
                             'scelar': '5m.gz',
                             'window_size': 4,
                             'threshold_window': 0.01,
-                            'predict_percent': 0.45,
+                            'predict_percent': 0.1,
                             'trade': 'long',
                             'numeric': ['open', 'high', 'low', 'close', 'volume'],
                             'comment': 'Обучен на 2 месяце 04.2024 и 03.2024'
@@ -55,7 +74,7 @@ cnn_model = {
                             'scelar': '15m.gz',
                             'window_size': 3,
                             'threshold_window': 0.01,
-                            'predict_percent': 0.61,
+                            'predict_percent': 0.1,
                             'trade': 'long',
                             'numeric': ['open', 'high', 'low', 'close', 'volume'],
                             'comment': 'Обучен на 2 месяцах 04.2024 и 03.2024'
@@ -67,7 +86,7 @@ cnn_model = {
                             'scelar': '30m.gz',
                             'window_size': 3,
                             'threshold_window': 0.03,
-                            'predict_percent': 0.5,
+                            'predict_percent': 0.1,
                             'trade': 'long',
                             'numeric': ['open', 'high', 'low', 'close', 'volume'],
                             'comment': 'Обучен на 2 месяцах 04.2024 и 03.2024'
@@ -85,13 +104,13 @@ stg_dict = {
                 'exch': '',
                 'x': 1,
                 'decimal_part': 2,
+                'tp_percent': 0.1,
                 'move': 'two',  # up, down, two
             }
 
 class Strategy_AI_CNN(Api_Trade_Method):
     symbol: str
     uuid: str
-    predict_dict: None
 
     def __init__(self, stg_id, user_id):
         self.stg_id = stg_id
@@ -102,124 +121,77 @@ class Strategy_AI_CNN(Api_Trade_Method):
         self.stg_dict = self.getStgDictFromBD()
         config.getTgId(user_id=user_id)
         self.fee = self.getFeeRate(symbol=self.symbol)
+        self.predict_list = []
 
-    def Start(self):
+    async def Start(self):
         # получаем теущую цену +
         # если цена равна круглой цене в шаге который у нас указан, происходит покупка
         # тут же ставиться стоп на цену шага выше
         # запоминается время покупки в базу и стоп по этой покупке
         # если происходит покупка снова по этой цене, а старый тейкпрофит еще в базе, удаляется старый тейкпрофит и ставится новый двойной
         if self.CheckStopStartStg():
-            #self.checkTakeProfit()
-            self.predict_dict = self.checkAiPredict()
-            current_lastprice_list = self.check_price(self.predict_dict['predict'])
-            if self.predict_dict['buy'] and current_lastprice_list:
-                print(f'current_lastprice_list {current_lastprice_list}')
-                self.tryBuy(current_lastprice_list)
+            self.checkTakeProfit()
+            self.predict_list = self.checkAiPredict()
+            if not self.predict_list:
+                self.tryBuy()
+            self.session.close()
         else:
             print(f"answer {ddict['answer']}")
 
     def tryBuy(self, current_lastprice_list):
         print(f'покупаем')
         # - тикер берет текущую цену
-        # - если timestamp есть в истории покупок в диапазоне 0.5% от текущей цены и времени, тогда не совершаем сделку
-        rounded_data = [{**current_lastprice_list, 'close': round(current_lastprice_list['close'], self.stg_dict['decimal_part'])} for current_lastprice_list in data]
+        # - если цена до 2 децимел соотвествует уже купленной, то не покупаем
+        # - если такой цены нет, покупаем и пишем в stg_dict в базе rounded_data по которому проверяем наличие уже купленной цены
+        rounded_data = [{**self.predict_list, 'close': round(self.predict_list['close'], self.stg_dict['decimal_part'])} for self.predict_list in data]
         print(rounded_data)
-        tradeQ = self.session.query(TradeHistory).order_by(TradeHistory.id.desc())
-        priceCountQ = self.session.query(TradeHistory).filter_by(price=str(lastPrice), filled=False)
-        if priceCountQ.first():
-            lastTX = tradeQ.first()
-            if int(self.stg_dict['deals']) >= priceCountQ.count() and lastTX.price == str(lastPrice):
-                # print(f'IF {lastPrice} = {lastTX.price}')
-                # print(f"deals {self.stg_dict['deals']} >= {priceCountQ.count()}")
-                pass
-            else:
-                # print(f'ELSE {lastPrice} | {lastTX.price}')
-                if (self.stg_dict['move'] == 'down' and float(lastPrice) < float(lastTX.price)) or (
-                        self.stg_dict['move'] == 'up' and float(lastPrice) > float(lastTX.price)) or self.stg_dict[
-                    'move'] == 'two':
-                    print(f"price COUNT 2 {priceCountQ.count()} | deals = {self.stg_dict['deals']}\n")
-                    if self.stg_dict['fibo']:
-                        # fibo_next_num
-                        fibo_amount = 1
-                        tx = self.BuyMarket(self.symbol, fibo_amount)
-                    else:
-                        tx = self.BuyMarket(self.symbol, self.stg_dict['amount'])
-                    if 'error' not in tx:
-                        order_info = self.OrderHistory(tx['result']['orderId'])
-                        # print(f'order_info 1 {order_info}')
-                        buy_price = order_info['result']['list'][0]['cumExecValue']
-                        tx['result']['price'] = buy_price
-                        tp_order_dict = {
-                            'ctg': self.stg_dict['ctg'],
-                            'side': 'Sell',
-                            'symbol': self.symbol,
-                            'orderType': 'Market',
-                            'tp_price': float(buy_price) + float(self.stg_dict['step']),
-                            'qty': self.stg_dict['amount'],
-                            'uuid': tx['result']['orderId']
-                        }
-                        tp = self.TakeProfit(order_dict=tp_order_dict)
-                        if tp is not None and isinstance(tp, dict) and 'error' not in tp:
-                            last_tp = self.LastTakeProfitOrder(symbol=self.symbol, limit=1)
-                            tx['result']['price'] = round(float(buy_price), self.decimal_part)
-                            tx['result']['tpOrderId'] = last_tp['result']['list'][0]['orderId']
-                            self.createTX(tx=tx, tp=last_tp)
-                            config.message = emoji.emojize(
-                                ":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} повторно по {buy_price} [{self.stg_dict['name']}]"
 
-                        else:
-                            config.message = emoji.emojize(
-                                ":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} повторно по {buy_price} [{self.stg_dict['name']}]" \
-                                                         f"\nTakeProfit не был установлен по причине: {tp}"
-                        config.update_message = True
-                    else:
-                        config.message = tx['error']
-                        config.update_message = True
-        else:
-            tx = self.BuyMarket(self.symbol, self.stg_dict['amount'])
-            priceCountQ = self.session.query(TradeHistory).filter_by(price=str(lastPrice), filled=False)
-            lastTX = tradeQ.first()
-            # print(f'\nlastTX {lastTX.price}')
-            print(
-                f"else price COUNT - {priceCountQ.count()} | lastprice = {lastPrice}  |  | deals = {self.stg_dict['deals']}\n")
-            if 'error' not in tx:
-                # print(f"orderid {tx}\n")
-                order_info = self.OrderHistory(tx['result']['orderId'])
-                # print(f'order_info 2 {order_info}\n')
-                buy_price = order_info['result']['list'][0]['cumExecValue']
-                tx['result']['price'] = buy_price
-                order_dict = {
-                    'ctg': self.stg_dict['ctg'],
-                    'side': 'Sell',
-                    'symbol': self.symbol,
-                    'orderType': 'Market',
-                    'tp_price': float(buy_price) + float(self.stg_dict['step']),
-                    'qty': self.stg_dict['amount'],
-                    'uuid': tx['result']['orderId']
-                }
-                tp = self.TakeProfit(order_dict=order_dict)
-                # print(f'tp {tp}')
-                if tp is not None and isinstance(tp, dict) and 'error' not in tp:
-                    last_tp = self.LastTakeProfitOrder(symbol=self.symbol, limit=1)
-                    # print(f"tx buy {tx['result']}")
-                    tx['result']['price'] = round(float(buy_price), self.decimal_part)
-                    tx['result']['tpOrderId'] = last_tp['result']['list'][0]['orderId']
-                    tx_obj = self.createTX(tx=tx, tp=last_tp)
-                    # print(f"tp else {tp}")
-                    config.message = emoji.emojize(
-                        ":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} по {buy_price} [{self.stg_dict['name']}]"
+        priceCountQ = self.session.query(TradeHistory).filter(TradeHistory.filled==False, TradeHistory.stg_id==self.stg_id)
+        records = priceCountQ.all()
+        if records:
+            for record in records:
+                tx_dict = record.tx_dict
+                rounded_data_set = set(rounded_data)
+                has_match = any(item in rounded_data_set for item in tx_dict['predict_list'])
+                if has_match:
+                    return
                 else:
-                    config.message = emoji.emojize(
-                        ":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} по {buy_price} [{self.stg_dict['name']}]" \
-                                                 f"\nTakeProfit не был установлен по причине: {tp}"
-                config.update_message = True
-            else:
-                config.message = tx['error']
-                config.update_message = True
-        # - если купили ставим стоп на шаг выше
-        # - если это вторая покупка по цене, отменяем первый стоп и и ставим новый умноженный на 2
-        self.session.close()
+                    self.Buy()
+        else:
+            self.Buy()
+
+
+    def Buy(self):
+        tx = self.BuyMarket(self.symbol, self.stg_dict['amount'])
+        if 'error' not in tx:
+            tx = tx['result']
+            order_info = self.OrderHistory(tx['orderId'])
+            # print(f'order_info 1 {order_info}')
+            tx['price'] = order_info['result']['list'][0]['cumExecValue']
+            percent = float(tx['price']) * (self.stg_dict['tp_percent'] / 100)  # считаем сумму процента для takeprofit
+            tx['tp_price'] = float(tx['price']) + percent
+            self.createTX(tx=tx)
+            config.message = emoji.emojize(
+                ":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} по {buy_price} [{self.stg_dict['name']}]"
+            config.update_message = True
+        else:
+            config.message = tx['error']
+            config.update_message = True
+
+    def createTX(self, tx: dict):
+        print(f"tx {tx['result']}")
+        # print(f"tp {tp['result']}")
+        tx_dict = {
+            'buy_price': tp['price'],
+            'qty': self.stg_dict['amount']
+        }
+        createTx = TradeHistory(price=tx['price'],
+                                tp_price=tx['tp_price'],
+                                tx_id=tx['orderId'], tx_dict=tx_dict,
+                                stg_id=self.stg_id, user_id=self.user_id,
+                                )
+        self.session.add(createTx)
+        self.session.commit()
 
     def check_price(self, last_price_dict):
         # Получаем текущий timestamp
@@ -236,26 +208,10 @@ class Strategy_AI_CNN(Api_Trade_Method):
                 current_last_price_predict.append(item['close'])
         return current_last_price_predict
 
-    def createTX(self, tx: dict, tp: dict):
-        # print(f"tx {tx['result']}")
-        # print(f"tp {tp['result']}")
-        tx_dict = {
-            'price_clean': tp['result']['list'][0]['lastPriceOnCreated'],
-            'tp': tp['result']['list'][0]['price'],
-            'side': tp['result']['list'][0]['side'],
-            'qty': tp['result']['list'][0]['qty']
-        }
-        createTx = TradeHistory(price=tx['result']['price'], tx_id=tx['result']['orderId'], tx_dict=tx_dict,
-                                stg_id=self.stg_id, user_id=self.user_id,
-                                tp_id=tx['result']['tpOrderId']
-                                )
-        self.session.add(createTx)
-        self.session.commit()
-        return createTx
 
     def checkAiPredict(self):
         predict_price = []
-        result = {}
+        result = []
         for key, value in cnn_model.items():
             if key == self.symbol:
                 for item in value:
@@ -273,41 +229,44 @@ class Strategy_AI_CNN(Api_Trade_Method):
                     predict = CNNPredict(model_dict=item,
                                    klines=klines)
                     predict_price.append(predict.run())
-                    result['buy'] = True
-                    result['predict'] = predict_price
-        print(f'predict list tyt: {predict_price}')
+                    result = self.check_price(predict_price )
         return result
 
     def checkTakeProfit(self):
-        self.cleanHistory()
-
-    def cleanHistory(self):
-        tp = self.LastTakeProfitOrder(symbol=self.symbol, limit=50)
-        historyQ = self.session.query(TradeHistory).filter_by(filled=False)
-        # print(f'tp cleanHistory {tp} - {self.symbol}')
-        for tx in historyQ:
-            if not any(tx.tp_id in d.values() for d in tp['result']['list']):
-                tx.filled = True
+        tiker = self.getCurrentPrice(symbol=self.symbol)
+        print(f'tiker {tiker}')
+        tp_record = self.session.query(TradeHistory).filter(TradeHistory.filled == False, TradeHistory.stg_id == self.stg_id)
+        for item in tp_record:
+            if float(item.tp_price) >= tiker:
                 tx_dict = tx.tx_dict
-                fee = None
-                earn = None
-                percent = None
-                try:
-                    fee = round(((float(tx_dict['price_clean']) * float(self.fee['takerFeeRate'])) + (
-                                float(tx_dict['tp']) * float(self.fee['makerFeeRate']))) * int(tx_dict['qty']), 3)
-                    earn = round(((float(tx_dict['tp']) - float(tx_dict['price_clean'])) * int(tx_dict['qty'])) - fee,
-                                 3)
-                    percent = round((earn / float(tx_dict['price_clean'])) * 100, 3)
-                    config.message = emoji.emojize(
-                        ":money_with_wings:") + f" Сработал TakeProfit {round(float(tx_dict['tp']), 3)}, чистая прибыль {earn} usdt ({percent}%), комиссия {fee} [{self.stg_dict['name']}, {self.symbol}]"
+                tp_sell = self.SellMarket(symbol=self.symbol, qty=tx_dict['qty'])
+                if 'error' not in tp_sell:
+                    tp_sell = tp_sell['result']
+                    order_info = self.OrderHistory(tx['orderId'])
+                    # print(f'order_info 1 {order_info}')
+                    tp_sell['price'] = order_info['result']['list'][0]['cumExecValue']
+                    item.filled = True
+                    try:
+                        fee = round(((float(tx_dict['buy_price']) * float(self.fee['makerFeeRate'])) + (
+                                float(tp_sell['price']) * float(self.fee['makerFeeRate']))) * int(tx_dict['qty']), 3)
+                        earn = round(
+                            ((float(tp_sell['price']) - float(tx_dict['buy_price'])) * int(tx_dict['qty'])) - fee,
+                            3)
+                        percent = round((earn / float(tx_dict['buy_price'])) * 100, 3)
+                        config.message = emoji.emojize(
+                            ":money_with_wings:") + f" Сработал TakeProfit {round(float(tx_dict['tp']), 3)}, чистая прибыль {earn} usdt ({percent}%), комиссия {fee} [{self.stg_dict['name']}, {self.symbol}]"
+                        config.update_message = True
+                    except Exception as e:
+                        print(f'def checkTakeProfit ERROR: {e}')
+                    tx_dict['tp_ExecPrice'] = tp_sell['price']
+                    tx_dict['fee'] = fee
+                    tx_dict['earn'] = earn
+                    tx_dict['earn_percent'] = percent
+                    tx.tx_dict = tx_dict
+                    self.session.commit()
+                else:
+                    config.message = tx['error']
                     config.update_message = True
-                except:
-                    pass
-                self.session.commit()
-
-        self.session.close()
-
-    '''telegram bot func'''
 
     # включить или выключить стратегию торговли
     def CheckStopStartStg(self, change: bool = None) -> dict:
@@ -536,15 +495,6 @@ class CNNPredict():
     def __init__(self, model_dict, klines):
         self.model_dict = model_dict
         self.path = f"strategy/ai_cnn/cnn_model/{model_dict['coin']}/"
-        #self.path_model = os.path.join(self.path, model_dict['model'])
-        print(f'self.path_model {self.path}')
-        print(f"model {model_dict['model']}")
-        if os.path.exists(self.path):
-            print("Путь существует")
-        else:
-            print("Путь не существует")
-
-
         self.keras_model = load_model(f"{self.path}{model_dict['model']}")
         self.scaler = joblib.load(f"{self.path}{model_dict['scelar']}")
         self.window_size = model_dict['window_size']
@@ -557,10 +507,8 @@ class CNNPredict():
         x_new, close_prices = self.prepare_new_data()
         new_predictions = self.keras_model.predict(x_new)
         new_predicted_classes = (new_predictions > self.predict_percent).astype(int)  # ton 0.6
-
         # Вызов функции отрисовки
         self.plot_predictions(new_predicted_classes.flatten())
-
         print("Predicted classes:", len(new_predicted_classes))
 
         unique, counts = np.unique(new_predicted_classes, return_counts=True)
@@ -572,7 +520,8 @@ class CNNPredict():
         for predicted_class, close_price in zip(new_predicted_classes.flatten(), close_prices):
             if predicted_class == 1:
                 predict_price.append(close_price)
-                print(f"Class: {predicted_class}, Close Price: {close_price}")
+                #print(f"Class: {predicted_class}, Close Price: {close_price}")
+        #print(f'predict_price {predict_price}')
         return predict_price[-1]
 
     def prepare_new_data(self):
@@ -615,17 +564,20 @@ class CNNPredict():
     def plot_predictions(self, predictions):
         # Создание фигуры и оси
         plt.figure(figsize=(14, 7))
+        print('tyt4')
         plt.plot(self.df_scaled['close'], label='Close Price', color='blue')  # Рисуем цену закрытия
-
+        print('tyt5')
         # Расчет индексов, на которых были получены предсказания
         prediction_indexes = np.arange(self.window_size, len(predictions) + self.window_size)
-
+        print('tyt6')
         last_prediction_index = None
         # Отметка предсказаний модели зелеными метками
         for i, predicted in enumerate(predictions):
             if predicted == 1:  # Если модель предсказала движение на 1% или более
+                print(f'{i} PREDICT')
                 plt.scatter(prediction_indexes[i], self.df_scaled['close'].iloc[prediction_indexes[i]], color='red',
                             label='Predicted >1% Change' if i == 0 else "")
+        print('tyt7')
         # Добавление легенды и заголовка
         plt.title('Model Predictions on Price Data')
         plt.xlabel('Time')

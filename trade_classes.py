@@ -35,9 +35,12 @@ class Api_Trade_Method():
         session = create_session()
         api = session.query(Strategy).filter_by(id=stg_id).one()
         if api.user.api:
+            print('tyt')
             for bybit in api.user.api:
                 bybit_key = bybit.bybit_key
                 bybit_secret = bybit.bybit_secret
+            print(f'key {bybit_key}')
+            print(f'value {bybit_secret}')
             session_api = HTTP(
                 testnet=False,
                 api_key=bybit_key,
@@ -48,10 +51,9 @@ class Api_Trade_Method():
         return session_api
 
     def getCurrentPrice(self, symbol: str):
-        #self.api_session = HTTP(testnet=False)
         return self.api_session.get_tickers(
             category="spot",
-            symbol=symbol,
+            symbol=symbol
         )
 
     def BuyMarket(self, symbol: str, qty: int, tp: str = None, uuid: str = None):
@@ -60,6 +62,23 @@ class Api_Trade_Method():
                 category="linear",
                 symbol=symbol,
                 side="Buy",
+                orderType="Market",
+                qty=qty,
+                orderLinkId=uuid
+            )
+        except Exception as api_err:
+            err_split = api_err.args[0]
+            err_split = err_split.split(")", 1)[0]
+            if '110007' in err_split:
+                return {'error': emoji.emojize(":ZZZ:") + " Нет денег на счету для следующей покупки", 'code': api_err.args[0]}
+            return {'error': err_split, 'code': api_err.args[0]}
+
+    def SellMarket(self, symbol: str, qty: int, tp: str = None, uuid: str = None):
+        try:
+            return self.api_session.place_order(
+                category="linear",
+                symbol=symbol,
+                side="Sell",
                 orderType="Market",
                 qty=qty,
                 orderLinkId=uuid

@@ -93,11 +93,10 @@ def AddApiByBit(api_key, api_secret, id):
 def DelApiByBit(api_key, id):
     ddict = {}
     session = create_session()
-
     query = session.query(Api).filter_by(bybit_key=api_key).one()
     if query:
         session.delete(query)
-        query = session.query(Strategy).filter(Strategy.user.user == id)
+        query = session.query(Strategy).filter(Strategy.id == id)
         for item in query:
             item.start = False
         session.commit()
