@@ -35,26 +35,32 @@ class Api_Trade_Method():
         session = create_session()
         api = session.query(Strategy).filter_by(id=stg_id).one()
         if api.user.api:
-            print('tyt')
             for bybit in api.user.api:
                 bybit_key = bybit.bybit_key
                 bybit_secret = bybit.bybit_secret
-            print(f'key {bybit_key}')
-            print(f'value {bybit_secret}')
             session_api = HTTP(
                 testnet=False,
                 api_key=bybit_key,
                 api_secret=bybit_secret,
                 recv_window=8000
             )
+        if not session_api:
+            api.start = False
+            session.commit()
+            config.message = f"Необходимо проверить настройки API, ошибка получения данных"
+            config.update_message = True
         session.close()
         return session_api
 
+
+
+
     def getCurrentPrice(self, symbol: str):
-        return self.api_session.get_tickers(
+        ticker = self.api_session.get_tickers(
             category="spot",
             symbol=symbol
         )
+        return ticker
 
     def BuyMarket(self, symbol: str, qty: int, tp: str = None, uuid: str = None):
         try:
@@ -201,7 +207,7 @@ class Api_Trade_Method():
                 interval=interval,
                 limit=limit
                 )
-        print(f'len kline {len(all_candles)}')
+        #print(f'len kline {len(all_candles)}')
         return all_candles
         #except Exception as api_err:
         #    print(f"\nLastTakeProfitOrder exception: {api_err.args}\n")

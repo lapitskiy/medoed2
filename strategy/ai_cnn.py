@@ -22,7 +22,7 @@ import joblib
 import emoji #https://carpedm20.github.io/emoji/
 # https://bybit-exchange.github.io/docs/v5/order/create-order
 
-cnn_model = {
+cnn_model_test = {
         'TONUSDT':
                     [
                     {
@@ -40,7 +40,7 @@ cnn_model = {
                     ]
             }
 
-cnn_model_test = {
+cnn_model = {
         'TONUSDT':
                     [
                     {
@@ -50,7 +50,7 @@ cnn_model_test = {
                             'scelar': '1m.gz',
                             'window_size': 10,
                             'threshold_window': 0.01,
-                            'predict_percent': 0.1,
+                            'predict_percent': 0.5,
                             'trade': 'long',
                             'numeric': ['open', 'high', 'low', 'close', 'volume'],
                             'comment': 'Обучен на 1 месяце 04.2024'
@@ -62,7 +62,7 @@ cnn_model_test = {
                             'scelar': '5m.gz',
                             'window_size': 4,
                             'threshold_window': 0.01,
-                            'predict_percent': 0.1,
+                            'predict_percent': 0.5,
                             'trade': 'long',
                             'numeric': ['open', 'high', 'low', 'close', 'volume'],
                             'comment': 'Обучен на 2 месяце 04.2024 и 03.2024'
@@ -74,7 +74,7 @@ cnn_model_test = {
                             'scelar': '15m.gz',
                             'window_size': 3,
                             'threshold_window': 0.01,
-                            'predict_percent': 0.1,
+                            'predict_percent': 0.5,
                             'trade': 'long',
                             'numeric': ['open', 'high', 'low', 'close', 'volume'],
                             'comment': 'Обучен на 2 месяцах 04.2024 и 03.2024'
@@ -86,12 +86,63 @@ cnn_model_test = {
                             'scelar': '30m.gz',
                             'window_size': 3,
                             'threshold_window': 0.03,
-                            'predict_percent': 0.1,
+                            'predict_percent': 0.5,
                             'trade': 'long',
                             'numeric': ['open', 'high', 'low', 'close', 'volume'],
                             'comment': 'Обучен на 2 месяцах 04.2024 и 03.2024'
                         },
-                    ]
+                    ],
+        'BTCUSDT':
+            [
+                {
+                    'coin': 'BTCUSDT',
+                    'interval': '1',
+                    'model': '1m.keras',
+                    'scelar': '1m.gz',
+                    'window_size': 10,
+                    'threshold_window': 0.01,
+                    'predict_percent': 0.3,
+                    'trade': 'long',
+                    'numeric': ['open', 'high', 'low', 'close', 'volume'],
+                    'comment': 'Обучен на 3 месяцха 03,04,05.2024'
+                },
+                {
+                    'coin': 'TONUSDT',
+                    'interval': '5',
+                    'model': '5m.keras',
+                    'scelar': '5m.gz',
+                    'window_size': 4,
+                    'threshold_window': 0.01,
+                    'predict_percent': 0.5,
+                    'trade': 'long',
+                    'numeric': ['open', 'high', 'low', 'close', 'volume'],
+                    'comment': 'Обучен на 2 месяце 04.2024 и 03.2024'
+                },
+                {
+                    'coin': 'TONUSDT',
+                    'interval': '15',
+                    'model': '15m.keras',
+                    'scelar': '15m.gz',
+                    'window_size': 3,
+                    'threshold_window': 0.01,
+                    'predict_percent': 0.5,
+                    'trade': 'long',
+                    'numeric': ['open', 'high', 'low', 'close', 'volume'],
+                    'comment': 'Обучен на 2 месяцах 04.2024 и 03.2024'
+                },
+                {
+                    'coin': 'TONUSDT',
+                    'interval': '30',
+                    'model': '30m.keras',
+                    'scelar': '30m.gz',
+                    'window_size': 3,
+                    'threshold_window': 0.03,
+                    'predict_percent': 0.5,
+                    'trade': 'long',
+                    'numeric': ['open', 'high', 'low', 'close', 'volume'],
+                    'comment': 'Обучен на 2 месяцах 04.2024 и 03.2024'
+                },
+            ],
             }
 
 stg_dict = {
@@ -104,7 +155,7 @@ stg_dict = {
                 'exch': '',
                 'x': 1,
                 'decimal_part': 2,
-                'tp_percent': 0.1,
+                'tp_percent': 1,
                 'move': 'two',  # up, down, two
             }
 
@@ -124,28 +175,23 @@ class Strategy_AI_CNN(Api_Trade_Method):
         self.predict_list = []
 
     async def Start(self):
-        # получаем теущую цену +
-        # если цена равна круглой цене в шаге который у нас указан, происходит покупка
-        # тут же ставиться стоп на цену шага выше
-        # запоминается время покупки в базу и стоп по этой покупке
-        # если происходит покупка снова по этой цене, а старый тейкпрофит еще в базе, удаляется старый тейкпрофит и ставится новый двойной
         if self.CheckStopStartStg():
-            self.checkTakeProfit()
+            await self.checkTakeProfit()
             self.predict_list = self.checkAiPredict()
-            if not self.predict_list:
-                self.tryBuy()
+            current_lastprice_list = self.check_price(self.predict_list)
+            print(f'current_lastprice_list {current_lastprice_list}; predict_list {self.predict_list}')
+            if current_lastprice_list:
+                await self.tryBuy()
             self.session.close()
         else:
             print(f"answer {ddict['answer']}")
 
-    def tryBuy(self, current_lastprice_list):
-        print(f'покупаем')
+    async def tryBuy(self):
         # - тикер берет текущую цену
         # - если цена до 2 децимел соотвествует уже купленной, то не покупаем
         # - если такой цены нет, покупаем и пишем в stg_dict в базе rounded_data по которому проверяем наличие уже купленной цены
-        rounded_data = [{**self.predict_list, 'close': round(self.predict_list['close'], self.stg_dict['decimal_part'])} for self.predict_list in data]
+        rounded_data = [{**item, 'close': round(item['close'], self.stg_dict['decimal_part'])} for item in self.predict_list]
         print(rounded_data)
-
         priceCountQ = self.session.query(TradeHistory).filter(TradeHistory.filled==False, TradeHistory.stg_id==self.stg_id)
         records = priceCountQ.all()
         if records:
@@ -156,34 +202,38 @@ class Strategy_AI_CNN(Api_Trade_Method):
                 if has_match:
                     return
                 else:
-                    self.Buy()
+                    await self.Buy()
         else:
-            self.Buy()
+            await self.Buy()
 
 
-    def Buy(self):
+    async def Buy(self):
         tx = self.BuyMarket(self.symbol, self.stg_dict['amount'])
         if 'error' not in tx:
             tx = tx['result']
-            order_info = self.OrderHistory(tx['orderId'])
-            # print(f'order_info 1 {order_info}')
+            order_info = await self.OrderHistory(tx['orderId'])
             tx['price'] = order_info['result']['list'][0]['cumExecValue']
-            percent = float(tx['price']) * (self.stg_dict['tp_percent'] / 100)  # считаем сумму процента для takeprofit
-            tx['tp_price'] = float(tx['price']) + percent
+
+            decimal_places = len(tx['price'].split('.')[1])
+            percent = (float(tx['price']) / 100) * self.stg_dict['tp_percent']  # считаем сумму процента для takeprofit
+            print(f"percent {percent} : del {(float(tx['price']) / 100)} : tp_precent {self.stg_dict['tp_percent']}")
+            tx['tp_price'] = float(tx['price']) + round(percent, decimal_places)
+            print(f"percent {percent} : del {(float(tx['price']) / 100)} : tp_precent {self.stg_dict['tp_percent']} : tx['tp_price'] {tx['tp_price']}")
             self.createTX(tx=tx)
             config.message = emoji.emojize(
-                ":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} по {buy_price} [{self.stg_dict['name']}]"
+                ":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} по {tx['price']} [{self.stg_dict['name']}]"
             config.update_message = True
         else:
             config.message = tx['error']
             config.update_message = True
 
     def createTX(self, tx: dict):
-        print(f"tx {tx['result']}")
+        #print(f"tx {tx['result']}")
         # print(f"tp {tp['result']}")
         tx_dict = {
-            'buy_price': tp['price'],
-            'qty': self.stg_dict['amount']
+            'buy_price': tx['price'],
+            'qty': self.stg_dict['amount'],
+            'predict_list': self.predict_list
         }
         createTx = TradeHistory(price=tx['price'],
                                 tp_price=tx['tp_price'],
@@ -193,17 +243,18 @@ class Strategy_AI_CNN(Api_Trade_Method):
         self.session.add(createTx)
         self.session.commit()
 
-    def check_price(self, last_price_dict):
+    def check_price(self, last_price_list):
         # Получаем текущий timestamp
         current_time = datetime.utcnow()
         current_last_price_predict = []
-        for item in last_price_dict:
+        for item in last_price_list:
             # Преобразование timestamp из словаря в объект datetime
             record_time = datetime.utcfromtimestamp(int(item['timestamp']) / 1000)
             # Разница времени между текущим моментом и timestamp в словаре
             time_difference = current_time - record_time
             # Проверяем, прошло ли менее 60 секунд
             time_interval = 60 * int(item['interval']) * 2
+            print(f'last record_time: {record_time}')
             if time_difference.total_seconds() <= time_interval:
                 current_last_price_predict.append(item['close'])
         return current_last_price_predict
@@ -229,40 +280,38 @@ class Strategy_AI_CNN(Api_Trade_Method):
                     predict = CNNPredict(model_dict=item,
                                    klines=klines)
                     predict_price.append(predict.run())
-                    result = self.check_price(predict_price )
+                    result = self.check_price(predict_price)
         return result
 
-    def checkTakeProfit(self):
+    async def checkTakeProfit(self):
         tiker = self.getCurrentPrice(symbol=self.symbol)
-        print(f'tiker {tiker}')
+        #print(f'tiker {tiker}')
+        tiker = tiker['result']['list'][0]['lastPrice']
         tp_record = self.session.query(TradeHistory).filter(TradeHistory.filled == False, TradeHistory.stg_id == self.stg_id)
         for item in tp_record:
-            if float(item.tp_price) >= tiker:
-                tx_dict = tx.tx_dict
+            if float(item.tp_price) <= float(tiker):
+                tx_dict = item.tx_dict
                 tp_sell = self.SellMarket(symbol=self.symbol, qty=tx_dict['qty'])
                 if 'error' not in tp_sell:
                     tp_sell = tp_sell['result']
-                    order_info = self.OrderHistory(tx['orderId'])
+                    order_info = await self.OrderHistory(tp_sell['orderId'])
                     # print(f'order_info 1 {order_info}')
                     tp_sell['price'] = order_info['result']['list'][0]['cumExecValue']
                     item.filled = True
-                    try:
-                        fee = round(((float(tx_dict['buy_price']) * float(self.fee['makerFeeRate'])) + (
-                                float(tp_sell['price']) * float(self.fee['makerFeeRate']))) * int(tx_dict['qty']), 3)
-                        earn = round(
-                            ((float(tp_sell['price']) - float(tx_dict['buy_price'])) * int(tx_dict['qty'])) - fee,
-                            3)
-                        percent = round((earn / float(tx_dict['buy_price'])) * 100, 3)
-                        config.message = emoji.emojize(
-                            ":money_with_wings:") + f" Сработал TakeProfit {round(float(tx_dict['tp']), 3)}, чистая прибыль {earn} usdt ({percent}%), комиссия {fee} [{self.stg_dict['name']}, {self.symbol}]"
-                        config.update_message = True
-                    except Exception as e:
-                        print(f'def checkTakeProfit ERROR: {e}')
+                    fee = round(((float(tx_dict['buy_price']) * float(self.fee['makerFeeRate'])) + (
+                            float(tp_sell['price']) * float(self.fee['makerFeeRate']))) * float(tx_dict['qty']), 3)
+                    earn = round(
+                        ((float(tp_sell['price']) - float(tx_dict['buy_price'])) * float(tx_dict['qty'])) - fee,
+                        3)
+                    percent = round((earn / float(tx_dict['buy_price'])) * 100, 3)
+                    config.message = emoji.emojize(
+                        ":money_with_wings:") + f"Сработал TakeProfit {round(float(tp_sell['price']), 4)}, чистая прибыль {earn} usdt ({percent}%), комиссия {fee} [{self.stg_dict['name']}, {self.symbol}]"
+                    config.update_message = True
                     tx_dict['tp_ExecPrice'] = tp_sell['price']
                     tx_dict['fee'] = fee
                     tx_dict['earn'] = earn
                     tx_dict['earn_percent'] = percent
-                    tx.tx_dict = tx_dict
+                    item.tx_dict = tx_dict
                     self.session.commit()
                 else:
                     config.message = tx['error']
@@ -509,13 +558,12 @@ class CNNPredict():
         new_predicted_classes = (new_predictions > self.predict_percent).astype(int)  # ton 0.6
         # Вызов функции отрисовки
         self.plot_predictions(new_predicted_classes.flatten())
-        print("Predicted classes:", len(new_predicted_classes))
+        print(f"Predicted classes {self.model_dict['interval']}: {len(new_predicted_classes)}")
 
         unique, counts = np.unique(new_predicted_classes, return_counts=True)
         print("Unique predicted classes and their counts:", dict(zip(unique, counts)))
 
         # Вывод предсказанных классов и соответствующих цен закрытия
-        print("Predicted classes and closing prices:")
         predict_price = []
         for predicted_class, close_price in zip(new_predicted_classes.flatten(), close_prices):
             if predicted_class == 1:
@@ -564,20 +612,15 @@ class CNNPredict():
     def plot_predictions(self, predictions):
         # Создание фигуры и оси
         plt.figure(figsize=(14, 7))
-        print('tyt4')
         plt.plot(self.df_scaled['close'], label='Close Price', color='blue')  # Рисуем цену закрытия
-        print('tyt5')
         # Расчет индексов, на которых были получены предсказания
         prediction_indexes = np.arange(self.window_size, len(predictions) + self.window_size)
-        print('tyt6')
         last_prediction_index = None
         # Отметка предсказаний модели зелеными метками
         for i, predicted in enumerate(predictions):
             if predicted == 1:  # Если модель предсказала движение на 1% или более
-                print(f'{i} PREDICT')
                 plt.scatter(prediction_indexes[i], self.df_scaled['close'].iloc[prediction_indexes[i]], color='red',
                             label='Predicted >1% Change' if i == 0 else "")
-        print('tyt7')
         # Добавление легенды и заголовка
         plt.title('Model Predictions on Price Data')
         plt.xlabel('Time')

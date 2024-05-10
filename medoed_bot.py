@@ -251,6 +251,7 @@ async def add_bybit_api_command(
     else:
         result = AddApiByBit(value1, value2, message.from_user.id)
     await message.delete()
+    print(f"answer {result['answer']}")
     await message.answer(f"{result['answer']}")
 
 

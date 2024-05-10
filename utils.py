@@ -96,9 +96,9 @@ def DelApiByBit(api_key, id):
     query = session.query(Api).filter_by(bybit_key=api_key).one()
     if query:
         session.delete(query)
-        query = session.query(Strategy).filter(Strategy.id == id)
-        for item in query:
-            item.start = False
+        query = session.query(Strategy).filter_by(id=id).one()
+        print(f'item false del {id}')
+        query.start = False
         session.commit()
     else:
         ddict['answer'] = 'Такого Api Bybit нет в базе'
