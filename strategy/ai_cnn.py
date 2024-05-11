@@ -19,6 +19,8 @@ matplotlib.use('Agg')
 from tensorflow.keras.models import load_model
 import joblib
 
+from numba import njit
+
 import emoji #https://carpedm20.github.io/emoji/
 # https://bybit-exchange.github.io/docs/v5/order/create-order
 
@@ -580,6 +582,7 @@ class CNNPredict():
         x_new, close_prices = self.create_rolling_windows()
         return x_new, close_prices
 
+    @njit
     def create_rolling_windows(self): # with VOLUME
         x = []
         #y = []
