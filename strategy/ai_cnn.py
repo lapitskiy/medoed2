@@ -103,7 +103,7 @@ cnn_model = {
                     'scelar': '1m.gz',
                     'window_size': 10,
                     'threshold_window': 0.01,
-                    'predict_percent': 0.3,
+                    'predict_percent': 0.25,
                     'trade': 'long',
                     'numeric': ['open', 'high', 'low', 'close', 'volume'],
                     'comment': 'Обучен на 3 месяцха 03,04,05.2024'
@@ -115,7 +115,7 @@ cnn_model = {
                     'scelar': '5m.gz',
                     'window_size': 4,
                     'threshold_window': 0.01,
-                    'predict_percent': 0.5,
+                    'predict_percent': 0.4,
                     'trade': 'long',
                     'numeric': ['open', 'high', 'low', 'close', 'volume'],
                     'comment': 'Обучен на 2 месяце 04.2024 и 03.2024'
@@ -127,7 +127,7 @@ cnn_model = {
                     'scelar': '15m.gz',
                     'window_size': 3,
                     'threshold_window': 0.01,
-                    'predict_percent': 0.5,
+                    'predict_percent': 0.4,
                     'trade': 'long',
                     'numeric': ['open', 'high', 'low', 'close', 'volume'],
                     'comment': 'Обучен на 2 месяцах 04.2024 и 03.2024'
@@ -139,7 +139,7 @@ cnn_model = {
                     'scelar': '30m.gz',
                     'window_size': 3,
                     'threshold_window': 0.03,
-                    'predict_percent': 0.5,
+                    'predict_percent': 0.4,
                     'trade': 'long',
                     'numeric': ['open', 'high', 'low', 'close', 'volume'],
                     'comment': 'Обучен на 2 месяцах 04.2024 и 03.2024'
@@ -178,11 +178,13 @@ class Strategy_AI_CNN(Api_Trade_Method):
 
     async def Start(self):
         if self.CheckStopStartStg():
+            print('tyt1')
             await self.checkTakeProfit()
+            print('tyt2')
             self.predict_list = self.checkAiPredict()
-            current_lastprice_list = self.check_price(self.predict_list)
-            print(f'current_lastprice_list {current_lastprice_list}; predict_list {self.predict_list}')
-            if current_lastprice_list:
+            print(f'predict_list {self.predict_list}')
+            if self.predict_list:
+                print('TYT')
                 await self.tryBuy()
             self.session.close()
         else:
@@ -192,19 +194,17 @@ class Strategy_AI_CNN(Api_Trade_Method):
         # - тикер берет текущую цену
         # - если цена до 2 децимел соотвествует уже купленной, то не покупаем
         # - если такой цены нет, покупаем и пишем в stg_dict в базе rounded_data по которому проверяем наличие уже купленной цены
-        rounded_data = [{**item, 'close': round(item['close'], self.stg_dict['decimal_part'])} for item in self.predict_list]
+        rounded_data = [round(item, self.stg_dict['decimal_part']) for item in self.predict_list]
         print(rounded_data)
         priceCountQ = self.session.query(TradeHistory).filter(TradeHistory.filled==False, TradeHistory.stg_id==self.stg_id)
         records = priceCountQ.all()
         if records:
             for record in records:
                 tx_dict = record.tx_dict
-                rounded_data_set = set(rounded_data)
-                has_match = any(item in rounded_data_set for item in tx_dict['predict_list'])
+                has_match = any(item in tx_dict['predict_list'] for item in self.predict_list)
                 if has_match:
                     return
-                else:
-                    await self.Buy()
+            await self.Buy()
         else:
             await self.Buy()
 
@@ -219,7 +219,7 @@ class Strategy_AI_CNN(Api_Trade_Method):
             decimal_places = len(tx['price'].split('.')[1])
             percent = (float(tx['price']) / 100) * self.stg_dict['tp_percent']  # считаем сумму процента для takeprofit
             print(f"percent {percent} : del {(float(tx['price']) / 100)} : tp_precent {self.stg_dict['tp_percent']}")
-            tx['tp_price'] = float(tx['price']) + round(percent, decimal_places)
+            tx['tp_price'] = round(float(tx['price']) + percent, decimal_places)
             print(f"percent {percent} : del {(float(tx['price']) / 100)} : tp_precent {self.stg_dict['tp_percent']} : tx['tp_price'] {tx['tp_price']}")
             self.createTX(tx=tx)
             config.message = emoji.emojize(
@@ -283,6 +283,7 @@ class Strategy_AI_CNN(Api_Trade_Method):
                                    klines=klines)
                     predict_price.append(predict.run())
                     result = self.check_price(predict_price)
+                    print('tytAI')
         return result
 
     async def checkTakeProfit(self):
@@ -559,9 +560,11 @@ class CNNPredict():
         new_predictions = self.keras_model.predict(x_new)
         new_predicted_classes = (new_predictions > self.predict_percent).astype(int)  # ton 0.6
         # Вызов функции отрисовки
-        self.plot_predictions(new_predicted_classes.flatten())
+        #try:
+        #    self.plot_predictions(new_predicted_classes.flatten())
+        #except Exception as e:
+        #    print(f'Error self.plot_predictions {e}')
         print(f"Predicted classes {self.model_dict['interval']}: {len(new_predicted_classes)}")
-
         unique, counts = np.unique(new_predicted_classes, return_counts=True)
         print("Unique predicted classes and their counts:", dict(zip(unique, counts)))
 
@@ -582,7 +585,6 @@ class CNNPredict():
         x_new, close_prices = self.create_rolling_windows()
         return x_new, close_prices
 
-    @njit
     def create_rolling_windows(self): # with VOLUME
         x = []
         #y = []

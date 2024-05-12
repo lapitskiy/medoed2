@@ -182,24 +182,22 @@ class Api_Trade_Method():
                     current_end = end_timestamp
 
                 # Запрос к API
-                kline = self.api_session.get_kline(
-                    category="linear",
-                    symbol=symbol,
-                    interval=interval,
-                    start=current_start,
-                    end=current_end,
-                    limit=max_candles_per_request
-                )
-
+                try:
+                    kline = self.api_session.get_kline(
+                        category="linear",
+                        symbol=symbol,
+                        interval=interval,
+                        start=current_start,
+                        end=current_end,
+                        limit=max_candles_per_request
+                    )
+                    all_candles.extend(kline['result']['list'])
+                    current_start = current_end + 60 * 1000  # Переходим к следующей минуте
+                except Exception as e:
+                    print(f'def get_kline API METHOD Error {e}')
+                    break
                 # Добавляем полученные данные в список
-                all_candles.extend(kline['result']['list'])
-
                 # Перемещаем начальный timestamp на следующий интервал
-                current_start = current_end + 60 * 1000  # Переходим к следующей минуте
-
-
-
-
         else:
             all_candles = self.api_session.get_kline(
                 category="linear",
