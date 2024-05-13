@@ -52,7 +52,7 @@ cnn_model = {
                             'scelar': '1m.gz',
                             'window_size': 10,
                             'threshold_window': 0.01,
-                            'predict_percent': 0.5,
+                            'predict_percent': 0.25,
                             'trade': 'long',
                             'numeric': ['open', 'high', 'low', 'close', 'volume'],
                             'comment': 'Обучен на 1 месяце 04.2024'
@@ -64,7 +64,7 @@ cnn_model = {
                             'scelar': '5m.gz',
                             'window_size': 4,
                             'threshold_window': 0.01,
-                            'predict_percent': 0.5,
+                            'predict_percent': 0.25,
                             'trade': 'long',
                             'numeric': ['open', 'high', 'low', 'close', 'volume'],
                             'comment': 'Обучен на 2 месяце 04.2024 и 03.2024'
@@ -76,7 +76,7 @@ cnn_model = {
                             'scelar': '15m.gz',
                             'window_size': 3,
                             'threshold_window': 0.01,
-                            'predict_percent': 0.5,
+                            'predict_percent': 0.25,
                             'trade': 'long',
                             'numeric': ['open', 'high', 'low', 'close', 'volume'],
                             'comment': 'Обучен на 2 месяцах 04.2024 и 03.2024'
@@ -88,7 +88,7 @@ cnn_model = {
                             'scelar': '30m.gz',
                             'window_size': 3,
                             'threshold_window': 0.03,
-                            'predict_percent': 0.5,
+                            'predict_percent': 0.25,
                             'trade': 'long',
                             'numeric': ['open', 'high', 'low', 'close', 'volume'],
                             'comment': 'Обучен на 2 месяцах 04.2024 и 03.2024'
@@ -178,11 +178,9 @@ class Strategy_AI_CNN(Api_Trade_Method):
 
     async def Start(self):
         if self.CheckStopStartStg():
-            print('tyt1')
             await self.checkTakeProfit()
-            print('tyt2')
             self.predict_list = self.checkAiPredict()
-            print(f'predict_list {self.predict_list}')
+            print(f'predict_dict {self.predict_list}')
             if self.predict_list:
                 print('TYT')
                 await self.tryBuy()
@@ -194,7 +192,7 @@ class Strategy_AI_CNN(Api_Trade_Method):
         # - тикер берет текущую цену
         # - если цена до 2 децимел соотвествует уже купленной, то не покупаем
         # - если такой цены нет, покупаем и пишем в stg_dict в базе rounded_data по которому проверяем наличие уже купленной цены
-        rounded_data = [round(item, self.stg_dict['decimal_part']) for item in self.predict_list]
+        rounded_data = [round(item['close'], self.stg_dict['decimal_part']) for item in self.predict_list]
         print(rounded_data)
         priceCountQ = self.session.query(TradeHistory).filter(TradeHistory.filled==False, TradeHistory.stg_id==self.stg_id)
         records = priceCountQ.all()
@@ -258,7 +256,7 @@ class Strategy_AI_CNN(Api_Trade_Method):
             time_interval = 60 * int(item['interval']) * 2
             print(f'last record_time: {record_time}')
             if time_difference.total_seconds() <= time_interval:
-                current_last_price_predict.append(item['close'])
+                current_last_price_predict.append(item)
         return current_last_price_predict
 
 
@@ -282,6 +280,7 @@ class Strategy_AI_CNN(Api_Trade_Method):
                     predict = CNNPredict(model_dict=item,
                                    klines=klines)
                     predict_price.append(predict.run())
+                    #print(f'predict_price1 {predict_price}')
                     result = self.check_price(predict_price)
                     print('tytAI')
         return result
@@ -317,7 +316,7 @@ class Strategy_AI_CNN(Api_Trade_Method):
                     item.tx_dict = tx_dict
                     self.session.commit()
                 else:
-                    config.message = tx['error']
+                    config.message = tp_sell['error']
                     config.update_message = True
 
     # включить или выключить стратегию торговли
@@ -582,7 +581,7 @@ class CNNPredict():
         # Предполагается, что new_data уже содержит нужные столбцы и очищен от недостающих значений
         new_data_scaled = self.scaler.transform(self.df[self.numeric_features])
         self.df_scaled = pd.DataFrame(new_data_scaled, columns=self.numeric_features)
-        x_new, close_prices = self.create_rolling_windows()
+        x_new, close_prices  = self.create_rolling_windows()
         return x_new, close_prices
 
     def create_rolling_windows(self): # with VOLUME
