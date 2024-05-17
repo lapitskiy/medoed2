@@ -254,7 +254,9 @@ class Strategy_AI_CNN(Api_Trade_Method):
             time_difference = current_time - record_time
             # Проверяем, прошло ли менее 60 секунд
             time_interval = 60 * int(item['interval']) * 2
-            print(f'last record_time: {record_time}')
+            current_time = datetime.now()
+            # Вывод времени в формате YYYY-MM-DD HH:MM:SS
+            print(f'last record_time: {record_time} - curr time {current_time.strftime("%Y-%m-%d %H:%M:%S")}')
             if time_difference.total_seconds() <= time_interval:
                 current_last_price_predict.append(item)
         return current_last_price_predict
@@ -277,12 +279,13 @@ class Strategy_AI_CNN(Api_Trade_Method):
                         limit = 1500
                     klines =self.get_kline(symbol=self.symbol, interval=item['interval'], limit=limit)
                     #print(f'klines: {klines}')
-                    predict = CNNPredict(model_dict=item,
-                                   klines=klines)
-                    predict_price.append(predict.run())
-                    #print(f'predict_price1 {predict_price}')
-                    result = self.check_price(predict_price)
-                    print('tytAI')
+                    if klines:
+                        predict = CNNPredict(model_dict=item,
+                                       klines=klines)
+                        predict_price.append(predict.run())
+                        #print(f'predict_price1 {predict_price}')
+                        result = self.check_price(predict_price)
+                        print('tytAI')
         return result
 
     async def checkTakeProfit(self):

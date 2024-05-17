@@ -199,12 +199,13 @@ class Api_Trade_Method():
                 # Добавляем полученные данные в список
                 # Перемещаем начальный timestamp на следующий интервал
         else:
-            all_candles = self.api_session.get_kline(
+            kline = self.api_session.get_kline(
                 category="linear",
                 symbol=symbol,
                 interval=interval,
                 limit=limit
                 )
+            all_candles.extend(kline['result']['list'])
         #print(f'len kline {len(all_candles)}')
         return all_candles
         #except Exception as api_err:
