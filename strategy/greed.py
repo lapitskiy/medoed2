@@ -25,8 +25,8 @@ stg_dict = {
                 'ctg': 'linear',
                 'exch': '',
                 'decimal_part': 2,
-                'tp_percent': 1,
-                'move': 'two',  # up, down, two
+                'base_lotsize': 0.002,
+                'step_percent': 0.027 # это шаг движения по мартингейлу, например в оригинале это движение на 1$ от 2000$
             }
 
 def create_session():
@@ -51,27 +51,44 @@ class Strategy_Greed(Api_Trade_Method):
     def Start(self):
         ddict = self.StopStartStg()
         if ddict['start'] == True:
-            self.tryBuySell(lastPrice)
+            self.tryBuySell()
         else:
             print(f"answer {ddict['answer']}")
             #simple_message_from_threading(answer=ddict['answer'])
 
     def tryBuySell(self, lastPrice):
+        lastTX = self.session.query(TradeHistory).filter(TradeHistory.filled == False,
+                                                              TradeHistory.stg_id == self.stg_id)
+        records = priceCountQ.all()
+        if records:
+            for record in records:
+                tx_dict = record.tx_dict
+                await self.ПроверяемУсловияПокупкиПоСтратгеии()
+        else:
+            await self.Buy()
 
         # покупаю 0.2 и продаю сразу 0.2
         # если покупка выросла на 1% закрываю
         # продаю 0.4
         pass
 
-    def createTX(self, tx: dict, tp: dict):
+
+
+    def createTX(self, tx: dict):
         print(f"tx {tx['result']}")
         tx_dict = {
-            'tp': tp['result']['list'][0]['price'],
-            'side': tp['result']['list'][0]['side'],
-            'qty': tp['result']['list'][0]['qty']
+            'tp': tx['result']['list'][0]['price'],
+            'side': tx['result']['list'][0]['side'],
+            'martingel': tx['martingeil'],
+            'qty': tx['result']['list'][0]['qty']
+            'lotSize': tx['lotSize']
         }
-        createTx = TradeHistory(price=tx['result']['price'], tx_id=tx['result']['orderId'], tx_dict=tx_dict, stg_id=self.stg_id, user_id=self.user_id,
-                                tp_id=tx['result']['tpOrderId']
+        createTx = TradeHistory(price=tx['result']['price'],
+                                tp_price=tx['tp_price'],
+                                tx_id=tx['result']['orderId'],
+                                tx_dict=tx_dict,
+                                stg_id=self.stg_id,
+                                user_id=self.user_id,
                                 )
         self.session.add(createTx)
         self.session.commit()
@@ -262,6 +279,34 @@ class Strategy_Greed(Api_Trade_Method):
             simple_message_from_threading(answer=answer)
             return True
         return False
+
+    async def Buy(self):
+        tx = self.BuyMarket(self.symbol, self.stg_dict['amount'])
+        if 'error' not in tx:
+            tx = tx['result']
+            order_info = await self.OrderHistory(tx['orderId'])
+            tx['price'] = order_info['result']['list'][0]['cumExecValue']
+            decimal_places = len(tx['price'].split('.')[1])
+            percent = (float(tx['price']) / 100) * self.stg_dict['step_percent']  # считаем сумму процента для takeprofit
+            print(f"percent {percent} : del {(float(tx['price']) / 100)} : tp_precent {self.stg_dict['tp_percent']}")
+            tx['tp_price'] = round(float(tx['price']) + percent, decimal_places)
+            print(f"percent {percent} : del {(float(tx['price']) / 100)} : tp_precent {self.stg_dict['tp_percent']} : tx['tp_price'] {tx['tp_price']}")
+            tx['martingeil'] = False
+            tx['lotSize'] = self.stg_dict['base_lotsize']
+            tx['qty'] =qty
+            self.createTX(tx=tx)
+            config.message = emoji.emojize(
+                ":check_mark_button:") + f" Куплено {self.stg_dict['amount']} {self.symbol} по {tx['price']} [{self.stg_dict['name']}]"
+            config.update_message = True
+        else:
+            config.message = tx['error']
+            config.update_message = True
+
+
+
+
+
+
 
 
 

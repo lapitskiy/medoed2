@@ -41,6 +41,7 @@ class StartTrade(threading.Thread):
             query = session.query(Strategy).all()
             for stg in query:
                 if stg.start and stg.stg_name and stg.id not in obj_state:
+                    # если class в памяти, не создавать его снова
                     stgObj = getStgObjFromClass(stg_id=stg.id)
                     obj_state[stg.id] = stgObj
                     asyncio.create_task(self.process_and_cleanup(stgObj, obj_state, stg.id))

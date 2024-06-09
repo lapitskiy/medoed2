@@ -52,9 +52,6 @@ class Api_Trade_Method():
         session.close()
         return session_api
 
-
-
-
     def getCurrentPrice(self, symbol: str):
         ticker = self.api_session.get_tickers(
             category="spot",
@@ -95,7 +92,6 @@ class Api_Trade_Method():
             if '110007' in err_split:
                 return {'error': emoji.emojize(":ZZZ:") + " Нет денег на счету для следующей покупки", 'code': api_err.args[0]}
             return {'error': err_split, 'code': api_err.args[0]}
-
 
     def TakeProfit(self, order_dict):
         try:
@@ -146,7 +142,6 @@ class Api_Trade_Method():
                 }
         except Exception as api_err:
             print(f"\nGet fee EXCEPTION: {api_err.args}\n")
-
 
     def LastTakeProfitOrder(self, symbol: str, limit: int):
         #try:
