@@ -18,7 +18,16 @@ from utils_db import getEngine
 from models import Strategy, TradeHistory
 from config import config
 
-
+stg_dict = {
+                'stg_name': 'greed_stg',
+                'name': 'Greed stg',
+                'desc': 'Стратегия торговли Greed',
+                'ctg': 'linear',
+                'exch': '',
+                'decimal_part': 2,
+                'tp_percent': 1,
+                'move': 'two',  # up, down, two
+            }
 
 def create_session():
     Session = sessionmaker(getEngine())
@@ -42,12 +51,13 @@ class Strategy_Greed(Api_Trade_Method):
     def Start(self):
         ddict = self.StopStartStg()
         if ddict['start'] == True:
-            self.tryBuy(lastPrice)
+            self.tryBuySell(lastPrice)
         else:
             print(f"answer {ddict['answer']}")
             #simple_message_from_threading(answer=ddict['answer'])
 
     def tryBuySell(self, lastPrice):
+
         # покупаю 0.2 и продаю сразу 0.2
         # если покупка выросла на 1% закрываю
         # продаю 0.4
